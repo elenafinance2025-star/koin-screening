@@ -30,6 +30,8 @@ var MODE_WEIGHTS = 'веса добавки';
 var MODES = [MODE_PROFILE, MODE_SUMS, MODE_WEIGHTS];
 var TYPE_MIXED = 'смешанный';
 var TYPE_AREA = 'по м²';
+var FSO_BY_GAS = 'пропорционально газу';
+var FSO_COMMON = 'в содержание котельной';
 var STATUS_OK = '✓ сходится';
 
 var COLOR_INPUT_BG = '#fff2cc';
@@ -145,6 +147,8 @@ var PARAMS = [
     note: 'Плюс половина последнего знака округления на каждый м² и Гкал' },
   { key: 'trueUp', label: 'Доводить сверхлимит в последнем месяце', def: 'Да', list: ['Да', 'Нет'],
     note: 'Когда введён март: март = факт сверхлимита сезона − разнесённое в предыдущих месяцах' },
+  { key: 'fsoMode', label: 'Распределение ФСО+МЗК', def: FSO_BY_GAS, list: [FSO_BY_GAS, FSO_COMMON],
+    note: '«пропорционально газу» — входит в цену Гкал и тарифы без счётчика / СПЧ; «в содержание котельной» — на все м²' },
   { key: 'tolArea', label: 'Допуск сверки площадей, м²', def: 0.5,
     note: 'Со счётчиками + СПЧ + без счётчиков = итого' }
 ];
@@ -939,9 +943,13 @@ function calcTariffs_(c, obj, cfg, boilerFn) {
 
   if (c.errors.length) return;
 
+  // ФСО+МЗК либо идёт на все м² вместе с содержанием котельной,
+  // либо входит в газовые тарифы в той же пропорции, что и газ (тогда распределяется вся база)
+  var common = P.fsoMode === FSO_COMMON;
   c.fsoMzk = c.base * (P.fso + P.mzk);
-  c.tCommon = round_(c.fsoMzk / total, dA);
-  c.boilerTotal = round_(c.boiler + c.tCommon, dA);
+  c.tCommon = common ? round_(c.fsoMzk / total, dA) : null;
+  c.boilerTotal = round_(c.boiler + (c.tCommon || 0), dA);
+  var gasAmount = common ? c.base - c.fsoMzk : c.base;
 
   var denom = no + P.kSpch * spch;
   var priceExact = 0;
@@ -955,7 +963,7 @@ function calcTariffs_(c, obj, cfg, boilerFn) {
       c.errors.push('нет площади без счётчиков / СПЧ для распределения');
       return;
     }
-    c.tNo = round_(c.base * share / denom, dA);
+    c.tNo = round_(gasAmount / denom, dA);
   } else {
     if (!(c.norm > 0)) {
       c.errors.push('нет объёма газа (или Гкал по общедомовому счётчику) для норматива');
@@ -965,7 +973,7 @@ function calcTariffs_(c, obj, cfg, boilerFn) {
       c.errors.push('есть Гкал по квартирным счётчикам, но площадь со счётчиками пустая');
       return;
     }
-    priceExact = (c.base - c.fsoMzk) / (c.norm * share);
+    priceExact = gasAmount / (c.norm * share);
     c.price = round_(priceExact, dP);
     var indiv = c.norm * share;
     c.restGkal = indiv - gkalMeter;
@@ -985,9 +993,9 @@ function calcTariffs_(c, obj, cfg, boilerFn) {
   }
   c.tSpch = round_(c.tNo * P.kSpch, dA);
 
-  c.charged = (c.price || 0) * gkalMeter + c.tNo * no + c.tSpch * spch + c.tCommon * total;
+  c.charged = (c.price || 0) * gkalMeter + c.tNo * no + c.tSpch * spch + (c.tCommon || 0) * total;
   c.diff = c.charged - c.base;
-  c.tol = P.tol + 0.5 * Math.pow(10, -dA) * (total + no + spch) + 0.5 * Math.pow(10, -dP) * gkalMeter;
+  c.tol = P.tol + 0.5 * Math.pow(10, -dA) * ((common ? total : 0) + no + spch) + 0.5 * Math.pow(10, -dP) * gkalMeter;
   if (Math.abs(c.diff) > c.tol) {
     c.errors.push('расхождение ' + fmt_(c.diff, 2) + ' грн больше допуска ' + fmt_(c.tol, 2) + ' грн');
   }
@@ -1000,8 +1008,9 @@ function writeReport_(sheet, cfg, result) {
   var P = cfg.params;
   resetOutput_(sheet);
   var info = 'Пересчитано ' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd.MM.yyyy HH:mm') +
-    '. «Содержание котельной» включает общедомовую часть ФСО ' + fmt_(P.fso * 100, 1) + '% + МЗК ' +
-    fmt_(P.mzk * 100, 1) + '%. Коэф. СПЧ ' + P.kSpch + '; сглаживание сверхлимита — «' + P.mode + '».';
+    '. ФСО ' + fmt_(P.fso * 100, 1) + '% + МЗК ' + fmt_(P.mzk * 100, 1) + '% ' +
+    (P.fsoMode === FSO_COMMON ? 'включены в «Содержание котельной» (на все м²)' :
+      'включены в газовые тарифы пропорционально газу; «Содержание котельной» = смета') + '. Коэф. СПЧ ' + P.kSpch + '; сглаживание сверхлимита — «' + P.mode + '».';
   var rows = [fitRow_([SHEET_REPORT + ': ТАРИФЫ НА ОТОПЛЕНИЕ'], W), fitRow_([info], W), fitRow_(REPORT_HEADERS, W)];
   sheet.getRange(1, 1, rows.length, W).setValues(rows);
   formatOutputHeader_(sheet, REPORT_HEADER_ROW, W);

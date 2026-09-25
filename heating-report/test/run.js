@@ -70,6 +70,11 @@ check('лаг: ноябрь → декабрь, март → апрель', res.
 check('ЛП без цены Гкал и без деления на ноль', res.rows[5].objName === 'ЛП' && res.rows[5].price === null && res.rows[5].tNo > 0);
 var sumBase = res.rows.slice(0, 5).reduce(function (s, c) { return s + c.base; }, 0);
 check('Лимнос: сумма баз = сумма счетов', near(sumBase, sbl, 0.01));
+cfg.params.fsoMode = 'в содержание котельной';
+var res2 = ctx.computeAll_(cfg, inputs.slice(0, 6), boiler);
+check('режим «в содержание котельной»: всё сходится, котельная = смета + ФСО+МЗК',
+  res2.rows.every(function (c) { return c.status === '✓ сходится'; }) && res2.rows[0].boilerTotal > 11.76);
+check('режим «пропорционально газу»: котельная = смета', res.rows[0].boilerTotal === 11.75 && res.rows[0].tCommon === null);
 check('ширина строки отчёта = 11', ctx.fitRow_(['x'], 11).length === 11);
 
 console.log(failed ? '\nПРОВАЛЕНО: ' + failed : '\nВсе проверки пройдены');
