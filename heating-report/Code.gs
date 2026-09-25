@@ -37,6 +37,8 @@ var TARGET_SPLIT = 'раздельно: цена Гкал ровная, квит
 var LEGACY_PARAM_VALUES = { 'квитанции без счётчика': TARGET_SPLIT };
 var TARGET_BASE = 'базе распределения';
 var STATUS_OK = '✓ сходится';
+var COLOR_WARN_BG = '#fff2cc';
+var COLOR_WARN_FONT = '#b45f06';
 
 var COLOR_INPUT_BG = '#fff2cc';
 var COLOR_INPUT_FONT = '#1155cc';
@@ -829,10 +831,31 @@ function computeAll_(cfg, inputs, boilerFn) {
     overlimit.push(alloc);
   });
 
+  // Проверка сверхлимита: счёт без сверхлимита ÷ м³ газа должен быть близок к обычной цене газа этого ЖК
+  Object.keys(groups).forEach(function (name) {
+    var prices = [];
+    groups[name].forEach(function (c) { if (c.gas > 0 && c.bill > 0) prices.push((c.bill - c.olFact) / c.gas); });
+    if (prices.length < 3) return;
+    var sorted = prices.slice().sort(function (x, y) { return x - y; });
+    var median = sorted[Math.floor(sorted.length / 2)];
+    groups[name].forEach(function (c) {
+      if (!(c.gas > 0 && c.bill > 0) || !(median > 0)) return;
+      var pr = (c.bill - c.olFact) / c.gas;
+      if (c.olFact > 0 && pr < 0.6 * median) {
+        c.warnings.push('без сверхлимита газ выходит ' + fmt_(pr, 2) + ' грн/м³ при обычных ~' + fmt_(median, 2) +
+          ' — похоже, сверхлимита в этом счёте меньше, чем указано');
+      } else if (pr > 1.6 * median) {
+        c.warnings.push('без сверхлимита газ выходит ' + fmt_(pr, 2) + ' грн/м³ при обычных ~' + fmt_(median, 2) +
+          ' — похоже, в счёте есть сверхлимит, не указанный в ВВОДе');
+      }
+    });
+  });
+
   // Тарифы
   rows.forEach(function (c) {
     if (!c.errors.length) calcTariffs_(c, c.obj, cfg, boilerFn);
-    c.status = c.errors.length ? '⚠ ' + c.errors.join('; ') : STATUS_OK;
+    c.status = c.errors.length ? '⚠ ' + c.errors.join('; ') :
+      STATUS_OK + (c.warnings.length ? ' · проверьте: ' + c.warnings.join('; ') : '');
   });
 
   rows.sort(function (a, b) {
@@ -846,7 +869,7 @@ function computeAll_(cfg, inputs, boilerFn) {
 
 function newCalc_(rowNum) {
   return {
-    rowNum: rowNum, errors: [], month: '', monthIdx: -1, receipt: '', objName: '', obj: null, order: 9999,
+    rowNum: rowNum, errors: [], warnings: [], month: '', monthIdx: -1, receipt: '', objName: '', obj: null, order: 9999,
     bill: null, olFact: null, olAdd: null, olSurcharge: null, olNoMeter: null, priceBase: null, gas: null, gkalHouse: null, areaTotal: null, areaMeter: null,
     areaSpch: null, areaNo: null, gkalMeter: null,
     base: null, norm: null, normSrc: '', fsoMzk: null, tCommon: null, boiler: null, boilerTotal: null,
@@ -883,6 +906,9 @@ function allocateOverlimit_(entries, plan, cfg, boilers, objType) {
   var entered = [];
   for (i = 0; i < n; i++) if (base0[i] !== null) entered.push(i);
   var complete = base0[n - 1] !== null; // март введён — сезон закрыт
+  // Месяцы без газа и без счёта в сглаживании не участвуют: их вес 0
+  var weights = cfg.weights.map(function (w, k) { return geom[k] && geom[k].zero ? 0 : w; });
+  cfg = { params: cfg.params, weights: weights, sums: cfg.sums };
   var seasonAmount = complete ? factTotal : Math.max(plan || 0, factTotal);
   var estimated = false;
   var target = '';
@@ -907,6 +933,7 @@ function allocateOverlimit_(entries, plan, cfg, boilers, objType) {
     for (i = 0; i < n; i++) if (b[i] === null) b[i] = 0;
     var geomOk = entered.length > 0;
     entered.forEach(function (k) { if (!geom[k] || !geom[k].ok) geomOk = false; });
+    if (geomOk && !entered.some(function (k) { return !geom[k].zero; })) geomOk = false;
     if (P.profileTarget !== TARGET_BASE && geomOk) {
       split = splitAllocation_(b, geom, entered, boilers, cfg, seasonAmount, objType, g);
       full = split.adds;
@@ -1014,9 +1041,10 @@ function splitAllocation_(b0, geom, entered, boilers, cfg, amount, objType, g) {
   var fm = P.fso + P.mzk;
   var i;
   var avg = { indivPerW: 0, restShare: 0, denom: 0, total: 0, p0: 0 };
-  entered.forEach(function (k) {
+  var real = entered.filter(function (k) { return !geom[k].zero; });
+  real.forEach(function (k) {
     var gm = geom[k];
-    var e = entered.length;
+    var e = real.length;
     if (objType !== TYPE_AREA) {
       avg.indivPerW += (cfg.weights[k] > 0 ? gm.indiv / cfg.weights[k] : gm.indiv) / e;
       avg.restShare += gm.rest / gm.indiv / e;
@@ -1027,7 +1055,9 @@ function splitAllocation_(b0, geom, entered, boilers, cfg, amount, objType, g) {
   });
   var G = [];
   for (i = 0; i < n; i++) {
-    if (geom[i] && geom[i].ok) {
+    if (geom[i] && geom[i].ok && geom[i].zero) {
+      G.push({ ok: true, zero: true, indiv: 0, rest: 0, gk: 0, denom: avg.denom || 1, total: avg.total || 1 });
+    } else if (geom[i] && geom[i].ok) {
       G.push(geom[i]);
     } else {
       var indiv = cfg.weights[i] * avg.indivPerW;
@@ -1046,7 +1076,7 @@ function splitAllocation_(b0, geom, entered, boilers, cfg, amount, objType, g) {
     for (i = 0; i < n; i++) { sumIndiv += G[i].indiv; sumRest += G[i].rest; }
     flat = sumIndiv > 0 ? g * amount / sumIndiv : 0;
     noAmount = flat * sumRest;
-    for (i = 0; i < n; i++) p0.push(G[i].indiv > 0 ? g * b0[i] / G[i].indiv : avg.p0);
+    for (i = 0; i < n; i++) p0.push(G[i].indiv > 0 ? g * b0[i] / G[i].indiv : (G[i].zero ? 0 : avg.p0));
   }
   // Квитанция без счётчика = c(i) + m(i) × добавка_без_счётчиков(i)
   var a = [];
@@ -1064,8 +1094,8 @@ function splitAllocation_(b0, geom, entered, boilers, cfg, amount, objType, g) {
       gasAll = (p0[i] + flat) * gm2.gk + gasNoMeter;
     }
     var c = boil(i) + gasNoMeter / gm2.denom + (common ? gasAll / g * fm / gm2.total : 0);
-    a.push(cfg.weights[i] / m);
-    c0.push(c / m);
+    a.push(G[i].zero ? 0 : cfg.weights[i] / m);
+    c0.push(G[i].zero ? 0 : c / m);
   }
   var addNo = fillAdditions_(a, c0, noAmount);
   var adds = [];
@@ -1086,7 +1116,13 @@ function rowGeom_(c, obj, P) {
   var spch = c.areaSpch || 0;
   var no = c.areaNo || 0;
   var denom = no + P.kSpch * spch;
-  var res = { ok: false, indiv: 0, rest: 0, gk: c.gkalMeter || 0, denom: denom, total: c.areaTotal || 0 };
+  var res = { ok: false, zero: false, indiv: 0, rest: 0, gk: c.gkalMeter || 0, denom: denom, total: c.areaTotal || 0 };
+  // Месяц без газа и без счёта: в сглаживании не участвует (вес 0)
+  if (Math.abs((c.bill || 0) - (c.olFact || 0)) < 0.005 && !(c.gas > 0) && !(c.gkalHouse > 0)) {
+    res.ok = true;
+    res.zero = true;
+    return res;
+  }
   if (!(denom > 0) || !(res.total > 0)) return res;
   if (obj.type === TYPE_AREA) {
     res.ok = true;
@@ -1094,10 +1130,23 @@ function rowGeom_(c, obj, P) {
   }
   var norm = c.gas > 0 ? c.gas * P.kcal : (c.gkalHouse > 0 ? c.gkalHouse : 0);
   if (!(norm > 0)) return res;
-  res.indiv = norm * share;
-  res.rest = res.indiv - res.gk;
-  res.ok = res.rest >= 0;
+  var r = effectiveRest_(norm * share, res.gk, c.areaMeter || 0, denom);
+  res.rest = r.rest;
+  res.indiv = res.gk + r.rest;
+  res.ok = res.indiv > 0;
   return res;
+}
+
+/**
+ * Остаток Гкал на квартиры без счётчиков и СПЧ. Обычно = индивидуальная часть норматива − Гкал по счётчикам.
+ * Если счётчики показали больше индивидуальной части норматива, остаток отрицательный — тогда квартиры без
+ * счётчиков считаем по среднему потреблению квартир со счётчиками на м² (с коэффициентом для СПЧ).
+ */
+function effectiveRest_(indiv, gkMeter, meterArea, denom) {
+  var rest = indiv - gkMeter;
+  if (rest >= 0) return { rest: rest, byMeters: false };
+  var perM2 = meterArea > 0 ? gkMeter / meterArea : 0;
+  return { rest: perM2 * denom, byMeters: true };
 }
 
 /** Тарифы одной строки ЖК × месяц. Ошибки складываются в c.errors. */
@@ -1109,7 +1158,7 @@ function calcTariffs_(c, obj, cfg, boilerFn) {
 
   var baseNoOl = c.bill - c.olFact; // счёт без сверхлимита
   c.base = baseNoOl + (c.olAdd || 0);
-  if (!(c.base > 0)) c.errors.push('база распределения ≤ 0');
+  if (c.base < -0.005) c.errors.push('база распределения меньше 0');
 
   var total = c.areaTotal;
   var meter = c.areaMeter || 0;
@@ -1152,7 +1201,8 @@ function calcTariffs_(c, obj, cfg, boilerFn) {
 
   if (obj.type === TYPE_AREA) {
     if (gkalMeter > 0 || meter > 0) {
-      c.errors.push('учёт по м²: «Площадь со счётчиками» и «Гкал по квартирным счётчикам» должны быть пустыми');
+      c.errors.push('учёт по м²: счётчиков нет — площадь ' + fmt_(meter, 2) + ' перенесите из «Площадь со счётчиками» ' +
+        'в «Площадь без счётчиков», «Гкал по квартирным счётчикам» оставьте пустыми');
       return;
     }
     if (!(denom > 0)) {
@@ -1162,24 +1212,33 @@ function calcTariffs_(c, obj, cfg, boilerFn) {
     c.tNo = round_((g * baseNoOl + addNo) / denom, dA);
   } else {
     if (!(c.norm > 0)) {
-      c.errors.push('нет объёма газа (или Гкал по общедомовому счётчику) для норматива');
-      return;
+      if (Math.abs(baseNoOl) < 0.005 && !(c.olAdd > 0)) {
+        // Газа в месяце не было и счёта нет — газовые тарифы нулевые, содержание котельной платят как обычно
+        c.normSrc = 'газа не было';
+        c.tNo = 0;
+      } else {
+        c.errors.push('есть счёт ' + fmt_(c.bill, 2) + ' грн, но нет норматива: внесите «Объём газа, м³»' +
+          ' (для тепла по Гкал — «Гкал по общедомовому счётчику»). Если газа в месяце не было, счёт должен быть 0');
+        return;
+      }
     }
     if (gkalMeter > 0 && !(meter > 0)) {
       c.errors.push('есть Гкал по квартирным счётчикам, но площадь со счётчиками пустая');
       return;
     }
-    var indiv = c.norm * share;
+  }
+  if (obj.type !== TYPE_AREA && c.norm > 0) {
+    var r = effectiveRest_(c.norm * share, gkalMeter, meter, denom);
+    c.restGkal = r.rest;
+    if (r.byMeters) {
+      c.warnings.push('Гкал по счётчикам (' + fmt_(gkalMeter, 2) + ') больше индивидуальной части норматива (' +
+        fmt_(c.norm * share, 2) + ') — квартиры без счётчиков посчитаны по среднему потреблению квартир со счётчиками');
+    }
+    var indivEff = gkalMeter + c.restGkal;
     // Цена Гкал = цена счёта без сверхлимита + надбавка сверхлимита (одинаковая на весь сезон)
-    c.priceBase = g * baseNoOl / indiv;
+    c.priceBase = g * baseNoOl / indivEff;
     priceExact = c.priceBase + (c.olSurcharge || 0);
     c.price = round_(priceExact, dP);
-    c.restGkal = indiv - gkalMeter;
-    if (c.restGkal < 0) {
-      c.errors.push('Гкал по квартирным счётчикам (' + fmt_(gkalMeter, 2) + ') больше индивидуальной части норматива (' +
-        fmt_(indiv, 2) + ')');
-      return;
-    }
     var noMeterAmount = c.restGkal * c.priceBase + addNo;
     if (denom > 0) {
       c.tNo = round_(noMeterAmount / denom, dA);
@@ -1359,6 +1418,7 @@ function settingRef_(cfg, key) {
  */
 function detailFormulas_(c, cfg, r) {
   if (c.errors.length || c.tNo === null) return null;
+  if (c.obj.type !== TYPE_AREA && !(c.norm > 0)) return null; // месяц без газа — числами
   var keys = ['kcal', 'fso', 'mzk', 'kSpch', 'digitsArea', 'digitsPrice', 'tol'];
   var S = {};
   for (var k = 0; k < keys.length; k++) {
@@ -1391,9 +1451,11 @@ function detailFormulas_(c, cfg, r) {
   if (isArea) {
     tNo = '=ROUND((' + gMul + billNoOl + '+E' + r + ')/' + denom + sep + S.digitsArea + ')';
   } else {
-    priceBase = '=' + gMul + billNoOl + '/(H' + r + '*' + share + ')';
+    priceBase = '=' + gMul + billNoOl + '/(' + V(IN.GKAL_METER) + '+O' + r + ')';
     price = '=ROUND(M' + r + '+N(D' + r + ')' + sep + S.digitsPrice + ')';
-    rest = '=H' + r + '*' + share + '-' + V(IN.GKAL_METER);
+    // Если счётчики показали больше индивидуальной части норматива — по среднему потреблению квартир со счётчиками
+    var restRaw = 'H' + r + '*' + share + '-' + V(IN.GKAL_METER);
+    rest = '=IF(' + restRaw + '<0' + sep + V(IN.GKAL_METER) + '/' + V(IN.AREA_METER) + '*' + denom + sep + restRaw + ')';
     tNo = (c.areaNo || 0) + P.kSpch * (c.areaSpch || 0) > 0
       ? '=ROUND((O' + r + '*M' + r + '+E' + r + ')/' + denom + sep + S.digitsArea + ')'
       : 0;
@@ -1446,9 +1508,10 @@ function detailLegend_(P) {
     ['ФСО+МЗК, грн/м²', common ? 'ФСО+МЗК, грн ÷ Площадь итого — прибавляется к содержанию котельной' :
       'не считается: ФСО+МЗК входит в газовые тарифы пропорционально газу'],
     ['Содержание из сметы', 'сезонный лист ЖК, строка «Содержание котельной», колонка месяца'],
-    ['Цена Гкал без надбавки', '(Счёт − Сверхлимит факт)' + g + ' ÷ (Норматив × (1 − ФСО − МЗК))'],
+    ['Цена Гкал без надбавки', '(Счёт − Сверхлимит факт)' + g + ' ÷ (Гкал по квартирным счётчикам + Остаток Гкал)'],
     ['Цена 1 Гкал', 'Цена Гкал без надбавки + Надбавка к цене Гкал — платят квартиры со счётчиками за свои Гкал'],
-    ['Остаток Гкал', 'Норматив × (1 − ФСО − МЗК) − Гкал по квартирным счётчикам'],
+    ['Остаток Гкал', 'Норматив × (1 − ФСО − МЗК) − Гкал по квартирным счётчикам; если получается меньше 0 (счётчики ' +
+      'показали больше норматива) — Гкал по счётчикам ÷ Площадь со счётчиками × (Площадь без счётчиков + коэф. СПЧ × Площадь СПЧ)'],
     ['Тариф без счётчика', '(Остаток Гкал × Цена Гкал без надбавки + Сверхлимит на квартиры без счётчиков) ÷ ' +
       '(Площадь без счётчиков + коэф. СПЧ × Площадь СПЧ); для учёта по м²: ((Счёт − Сверхлимит факт)' + g +
       ' + Сверхлимит на квартиры без счётчиков) ÷ (Площадь без счётчиков + коэф. СПЧ × Площадь СПЧ)'],
@@ -1473,11 +1536,12 @@ function paintStatus_(sheet, firstRow, calcRows, W) {
   var fonts = [];
   calcRows.forEach(function (c) {
     var bad = c.errors.length > 0;
+    var warn = !bad && c.warnings && c.warnings.length > 0;
     var bgRow = [];
     var fontRow = [];
     for (var i = 0; i < W; i++) {
-      bgRow.push(bad ? COLOR_ERROR_BG : '#ffffff');
-      fontRow.push(bad && i === W - 1 ? COLOR_ERROR_FONT : (i === W - 1 ? '#38761d' : '#000000'));
+      bgRow.push(bad ? COLOR_ERROR_BG : (warn && i === W - 1 ? COLOR_WARN_BG : '#ffffff'));
+      fontRow.push(i !== W - 1 ? '#000000' : (bad ? COLOR_ERROR_FONT : (warn ? COLOR_WARN_FONT : '#38761d')));
     }
     bgs.push(bgRow);
     fonts.push(fontRow);

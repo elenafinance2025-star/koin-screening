@@ -47,8 +47,8 @@ var failed = 0;
   function evalF(sheet, f) {
     var js = f.replace(/'([^']+)'!\$?([A-Z]+)\$?(\d+)/g, function (_, sh, col, row) { return 'V(' + JSON.stringify(sh) + ',"' + col + row + '")'; })
       .replace(/(^|[^A-Za-z"])([A-Z]{1,2})(\d+)(?![\d"])/g, function (_, pre, col, row) { return pre + 'V(' + JSON.stringify(sheet) + ',"' + col + row + '")'; })
-      .replace(/;/g, ',').replace(/\^/g, '**').replace(/ROUND\(/g, 'R(').replace(/\bN\(/g, 'NN(');
-    return Function('V', 'R', 'NN', 'return ' + js)(val, function (x, d) { return ctx.round_(x, d); }, function (x) { return Number(x) || 0; });
+      .replace(/;/g, ',').replace(/\^/g, '**').replace(/ROUND\(/g, 'R(').replace(/\bIF\(/g, 'IFF(').replace(/\bN\(/g, 'NN(');
+    return Function('V', 'R', 'NN', 'IFF', 'return ' + js)(val, function (x, d) { return ctx.round_(x, d); }, function (x) { return Number(x) || 0; }, function (c, a, b) { return c ? a : b; });
   }
   var cols = { F: 'olAdd', G: 'base', H: 'norm', J: 'fsoMzk', M: 'priceBase', N: 'price', O: 'restGkal', P: 'tNo', Q: 'tSpch', S: 'charged', T: 'diff', U: 'tol' };
   res.rows.forEach(function (c, k) {

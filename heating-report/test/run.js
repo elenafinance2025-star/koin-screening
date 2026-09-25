@@ -63,7 +63,7 @@ res.rows.forEach(function (c) {
   console.log('     ' + [c.month, c.receipt, c.objName, c.bill, c.boilerTotal, c.price, c.tNo, c.tSpch,
     c.charged === null ? '' : c.charged.toFixed(2), c.diff === null ? '' : c.diff.toFixed(2), c.status].join(' | '));
 });
-var ok = res.rows.filter(function (c) { return c.status === '✓ сходится'; });
+var ok = res.rows.filter(function (c) { return c.status.indexOf('✓ сходится') === 0; });
 check('Лимнос 5 месяцев + ЛП сходятся', ok.length === 6);
 check('дубль Гавайев помечен ошибкой', res.rows.filter(function (c) { return c.objName === 'Гавайи' && /повтор/.test(c.status); }).length === 2);
 check('лаг: ноябрь → декабрь, март → апрель', res.rows[0].receipt === 'Декабрь' && res.rows[4].receipt === 'Апрель');
@@ -73,7 +73,7 @@ check('Лимнос: сумма баз = сумма счетов', near(sumBase,
 cfg.params.fsoMode = 'в содержание котельной';
 var res2 = ctx.computeAll_(cfg, inputs.slice(0, 6), boiler);
 check('режим «в содержание котельной»: всё сходится, котельная = смета + ФСО+МЗК',
-  res2.rows.every(function (c) { return c.status === '✓ сходится'; }) && res2.rows[0].boilerTotal > 11.76);
+  res2.rows.every(function (c) { return c.status.indexOf('✓ сходится') === 0; }) && res2.rows[0].boilerTotal > 11.76);
 check('режим «пропорционально газу»: котельная = смета', res.rows[0].boilerTotal === 11.75 && res.rows[0].tCommon === null);
 cfg.params.fsoMode = 'пропорционально газу';
 var lim = res.rows.slice(0, 5);
@@ -89,7 +89,7 @@ check('раздельно: квитанция без счётчика по пр�
   }));
 var part = ctx.computeAll_(cfg, inputs.slice(0, 2), boiler);
 check('раздельно, неполный сезон (ноя+дек): считается без ошибок, добавки ≥ 0',
-  part.rows.every(function (c) { return c.status === '✓ сходится' && c.olAdd >= 0; }));
+  part.rows.every(function (c) { return c.status.indexOf('✓ сходится') === 0 && c.olAdd >= 0; }));
 check('ширина строки отчёта = 11', ctx.fitRow_(['x'], 11).length === 11);
 
 console.log(failed ? '\nПРОВАЛЕНО: ' + failed : '\nВсе проверки пройдены');
