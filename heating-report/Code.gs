@@ -672,6 +672,24 @@ function readInputRows_(sheet) {
   var W = INPUT_HEADERS.length;
   if (lastRow <= INPUT_HEADER_ROW) return [];
   var values = sheet.getRange(INPUT_HEADER_ROW + 1, 1, lastRow - INPUT_HEADER_ROW, W).getValues();
+  // Числа, вставленные текстом («134 902,91»), превращаем в настоящие числа — иначе формулы видят их как 0
+  var numCols = IN.GKAL_METER - IN.BILL + 1;
+  var changed = false;
+  var numeric = values.map(function (row) {
+    return row.slice(IN.BILL, IN.GKAL_METER + 1).map(function (v) {
+      if (typeof v !== 'string' || v.trim() === '') return v;
+      var n = parseNum_(v);
+      if (!n.ok || n.value === null) return v;
+      changed = true;
+      return n.value;
+    });
+  });
+  if (changed) {
+    sheet.getRange(INPUT_HEADER_ROW + 1, IN.BILL + 1, values.length, numCols).setValues(numeric);
+    values.forEach(function (row, k) {
+      for (var j = 0; j < numCols; j++) row[IN.BILL + j] = numeric[k][j];
+    });
+  }
   var out = [];
   for (var i = 0; i < values.length; i++) {
     var row = values[i];
@@ -1122,11 +1140,13 @@ function writeDetails_(sheet, cfg, result) {
   var olHeaderRow = olTitleRow + 1;
   var olRowByObj = {};
   result.overlimit.forEach(function (a, k) { olRowByObj[a.obj.name] = olHeaderRow + 1 + k; });
+  var formulaRows = [];
 
   result.rows.forEach(function (c, k) {
     var r = first + k;
     var f = detailFormulas_(c, cfg, r, olRowByObj[c.objName]);
-    rows.push(fitRow_(f || [
+    formulaRows.push(f ? fitRow_(f, W).map(asFormula_) : null);
+    rows.push(fitRow_(f ? [] : [
       c.month, c.objName, blank_(c.olFact), blank_(c.olAdd), blank_(c.base), blank_(c.norm), c.normSrc,
       blank_(c.fsoMzk), blank_(c.tCommon), blank_(c.boiler), blank_(c.price), blank_(c.restGkal),
       blank_(c.tNo), blank_(c.tSpch), c.tNo === null ? '' : round_((c.boilerTotal || 0) + c.tNo, P.digitsArea),
@@ -1144,7 +1164,7 @@ function writeDetails_(sheet, cfg, result) {
     if (a.trueUp) note.push('март доведён до факта сезона');
     if (!a.entered) note.push('нет введённых месяцев');
     var r = olRowByObj[a.obj.name];
-    rows.push(fitRow_([a.obj.name, a.plan, a.factTotal, a.seasonAmount, '=SUM(F' + r + ':J' + r + ')']
+    rows.push(fitRow_([a.obj.name, a.plan, a.factTotal, a.seasonAmount, a.allocated]
       .concat(a.adds.map(blank_)).concat([a.complete ? 'Да' : 'Нет', a.target || '', note.join('; ')]), W));
   });
   var lastRow = rows.length;
@@ -1154,6 +1174,11 @@ function writeDetails_(sheet, cfg, result) {
   detailLegend_(P).forEach(function (line) { rows.push(fitRow_(line, W)); });
 
   sheet.getRange(1, 1, rows.length, W).setValues(rows);
+  // Формулы пишем через setFormulas: так Google читает их в английском синтаксисе (запятые, точка)
+  // при любой локали таблицы. Через setValues формула разбиралась бы по правилам локали и ломалась.
+  formulaRows.forEach(function (fr, k) {
+    if (fr) sheet.getRange(first + k, 1, 1, W).setFormulas([fr]);
+  });
   formatOutputHeader_(sheet, DETAILS_HEADER_ROW, W);
 
   if (detailCount) {
@@ -1176,6 +1201,15 @@ function writeDetails_(sheet, cfg, result) {
   sheet.getRange(legendRow + 1, 1, rows.length - legendRow, 1).setFontWeight('bold');
   sheet.setColumnWidths(1, W, 115);
   sheet.setColumnWidth(W, 360);
+}
+
+/** Значение ячейки как формула для setFormulas: текст → ="текст", число → =число. */
+function asFormula_(v) {
+  if (v === '' || v === null || v === undefined) return '';
+  if (typeof v === 'number') return '=' + v;
+  var s = String(v);
+  if (s.charAt(0) === '=') return s;
+  return '="' + s.replace(/"/g, '""') + '"';
 }
 
 /** Ссылка на ячейку значения параметра на листе НАСТРОЙКИ, или null. */
@@ -1243,7 +1277,7 @@ function detailFormulas_(c, cfg, r, olRow) {
     '=ROUND(J' + r + '+N(I' + r + '),' + S.digitsArea + ')+M' + r,
     '=N(K' + r + ')*' + V(IN.GKAL_METER) + '+M' + r + '*' + V(IN.AREA_NO) + '+N' + r + '*' + V(IN.AREA_SPCH) + totalTerm,
     '=P' + r + '-E' + r,
-    '=' + S.tol + '+0.5*10^(-' + S.digitsArea + ')*(' + tolArea + V(IN.AREA_NO) + '+' + V(IN.AREA_SPCH) + ')+0.5*10^(-' +
+    '=' + S.tol + '+(1/2)*10^(-' + S.digitsArea + ')*(' + tolArea + V(IN.AREA_NO) + '+' + V(IN.AREA_SPCH) + ')+(1/2)*10^(-' +
       S.digitsPrice + ')*' + V(IN.GKAL_METER),
     c.status
   ];
