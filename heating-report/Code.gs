@@ -487,9 +487,17 @@ function validateSettings_(parsed) {
 
 function ensureInputSheet_(ss, force, log) {
   var sheet = ss.getSheetByName(SHEET_INPUT);
-  var current = sheet && getSheetVersion_(sheet) === KOIN_HEAT_VERSION &&
-    headerMatches_(sheet, INPUT_HEADER_ROW, INPUT_HEADERS);
-  if (current && !force) {
+  var headerOk = sheet && headerMatches_(sheet, INPUT_HEADER_ROW, INPUT_HEADERS);
+  var version = sheet ? getSheetVersion_(sheet) : 0;
+  if (headerOk && !force && version === 0 && sheet.getRange(1, 1).getDisplayValue().indexOf('(v' + KOIN_HEAT_VERSION + ')') >= 0) {
+    // Лист создан этой версией, но создание прервалось до метки версии — достраиваем, данные не трогаем
+    formatInputSheet_(sheet);
+    applyInputValidation_(ss, sheet);
+    setSheetVersion_(sheet);
+    log.push(SHEET_INPUT + ': достроен (данные сохранены)');
+    return sheet;
+  }
+  if (headerOk && version === KOIN_HEAT_VERSION && !force) {
     applyInputValidation_(ss, sheet);
     log.push(SHEET_INPUT + ': актуален');
     return sheet;
@@ -532,9 +540,19 @@ function ensureInputSheet_(ss, force, log) {
   }
   if (data.length) sheet.getRange(INPUT_HEADER_ROW + 1, 1, data.length, W).setValues(data.map(function (r) { return fitRow_(r, W); }));
 
+  formatInputSheet_(sheet);
+  applyInputValidation_(ss, sheet);
+  setSheetVersion_(sheet);
+  log.push(SHEET_INPUT + ': создан');
+  return sheet;
+}
+
+function formatInputSheet_(sheet) {
+  var W = INPUT_HEADERS.length;
   sheet.getRange(1, 1).setFontWeight('bold').setFontSize(13);
-  sheet.getRange(2, 1, 1, W).merge().setWrap(true).setFontStyle('italic');
-  sheet.setRowHeight(2, 42);
+  // Без объединения ячеек: объединённая строка не даёт закрепить первые две колонки
+  sheet.getRange(2, 1, 1, W).breakApart();
+  sheet.getRange(2, 1).setWrap(false).setFontStyle('italic');
   sheet.getRange(INPUT_HEADER_ROW, 1, 1, W).setFontWeight('bold').setBackground(COLOR_HEADER_BG)
     .setWrap(true).setVerticalAlignment('middle');
   sheet.setRowHeight(INPUT_HEADER_ROW, 48);
@@ -549,10 +567,6 @@ function ensureInputSheet_(ss, force, log) {
   sheet.setColumnWidth(W, 220);
   sheet.setFrozenRows(INPUT_HEADER_ROW);
   sheet.setFrozenColumns(2);
-  applyInputValidation_(ss, sheet);
-  setSheetVersion_(sheet);
-  log.push(SHEET_INPUT + ': создан');
-  return sheet;
 }
 
 function applyInputValidation_(ss, sheet) {
@@ -1081,7 +1095,7 @@ function paintStatus_(sheet, firstRow, calcRows, W) {
     var bgRow = [];
     var fontRow = [];
     for (var i = 0; i < W; i++) {
-      bgRow.push(bad ? COLOR_ERROR_BG : null);
+      bgRow.push(bad ? COLOR_ERROR_BG : '#ffffff');
       fontRow.push(bad && i === W - 1 ? COLOR_ERROR_FONT : (i === W - 1 ? '#38761d' : '#000000'));
     }
     bgs.push(bgRow);
