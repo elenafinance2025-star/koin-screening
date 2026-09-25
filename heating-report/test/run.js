@@ -75,6 +75,21 @@ var res2 = ctx.computeAll_(cfg, inputs.slice(0, 6), boiler);
 check('режим «в содержание котельной»: всё сходится, котельная = смета + ФСО+МЗК',
   res2.rows.every(function (c) { return c.status === '✓ сходится'; }) && res2.rows[0].boilerTotal > 11.76);
 check('режим «пропорционально газу»: котельная = смета', res.rows[0].boilerTotal === 11.75 && res.rows[0].tCommon === null);
+cfg.params.fsoMode = 'пропорционально газу';
+var lim = res.rows.slice(0, 5);
+check('раздельно: надбавка к цене Гкал одинаковая во всех месяцах (' + lim[0].olSurcharge.toFixed(2) + ' грн/Гкал)',
+  lim.every(function (c) { return Math.abs(c.olSurcharge - lim[0].olSurcharge) < 1e-9; }));
+var rc = lim.map(function (c) { return c.boilerTotal + c.tNo; });
+var w = [0.6, 1, 1, 1, 0.9], u = null;
+lim.forEach(function (c, i) { if (c.olNoMeter > 1e-6) u = rc[i] / w[i]; });
+check('раздельно: квитанция без счётчика по профилю там, где есть добавка, и не ниже профиля без неё (' +
+  rc.map(function (x) { return x.toFixed(2); }).join(' · ') + ')',
+  u !== null && lim.every(function (c, i) {
+    return c.olNoMeter > 1e-6 ? near(rc[i], w[i] * u, 0.02) : rc[i] >= w[i] * u - 0.02;
+  }));
+var part = ctx.computeAll_(cfg, inputs.slice(0, 2), boiler);
+check('раздельно, неполный сезон (ноя+дек): считается без ошибок, добавки ≥ 0',
+  part.rows.every(function (c) { return c.status === '✓ сходится' && c.olAdd >= 0; }));
 check('ширина строки отчёта = 11', ctx.fitRow_(['x'], 11).length === 11);
 
 console.log(failed ? '\nПРОВАЛЕНО: ' + failed : '\nВсе проверки пройдены');

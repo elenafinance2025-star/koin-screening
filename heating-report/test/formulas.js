@@ -35,12 +35,8 @@ var failed = 0;
   cfg.formulaSep = sep;
   var res = ctx.computeAll_(cfg, inputs, function (obj, m) { return { value: obj.name === 'ЛП' ? 10.23856553 : boil[m] }; });
   var det = sheets['ДЕТАЛИ РАСЧЁТА'] = {};
-  var first = 4, olHeader = first + res.rows.length + 2, olRow = {};
-  res.overlimit.forEach(function (a, k) {
-    olRow[a.obj.name] = olHeader + 1 + k;
-    a.adds.forEach(function (x, m) { det[ctx.indexToCol_(6 + m) + (olHeader + 1 + k)] = x === null ? '' : x; });
-  });
-  var rows = res.rows.map(function (c, k) { return ctx.detailFormulas_(c, cfg, first + k, olRow[c.objName]); });
+  var first = 4;
+  var rows = res.rows.map(function (c, k) { return ctx.detailFormulas_(c, cfg, first + k); });
   rows.forEach(function (row, k) { row.forEach(function (v, j) { det[ctx.indexToCol_(j + 1) + (first + k)] = v; }); });
 
   function val(sheet, ref) {
@@ -54,7 +50,7 @@ var failed = 0;
       .replace(/;/g, ',').replace(/\^/g, '**').replace(/ROUND\(/g, 'R(').replace(/\bN\(/g, 'NN(');
     return Function('V', 'R', 'NN', 'return ' + js)(val, function (x, d) { return ctx.round_(x, d); }, function (x) { return Number(x) || 0; });
   }
-  var cols = { E: 'base', F: 'norm', H: 'fsoMzk', K: 'price', L: 'restGkal', M: 'tNo', N: 'tSpch', P: 'charged', Q: 'diff', R: 'tol' };
+  var cols = { F: 'olAdd', G: 'base', H: 'norm', J: 'fsoMzk', M: 'priceBase', N: 'price', O: 'restGkal', P: 'tNo', Q: 'tSpch', S: 'charged', T: 'diff', U: 'tol' };
   res.rows.forEach(function (c, k) {
     var r = first + k, bad = [];
     if (sep === ';') rows[k].forEach(function (f) { if (typeof f === 'string' && /ROUND\([^;]*,/.test(f)) bad.push('запятая в формуле: ' + f); });
@@ -64,9 +60,9 @@ var failed = 0;
       var got = val('ДЕТАЛИ РАСЧЁТА', col + r);
       if (Math.abs(got - exp) > 1e-6 * Math.max(1, Math.abs(exp))) bad.push(col + ': формула ' + got + ' ≠ скрипт ' + exp);
     });
-    var receipt = val('ДЕТАЛИ РАСЧЁТА', 'O' + r);
+    var receipt = val('ДЕТАЛИ РАСЧЁТА', 'R' + r);
     console.log((bad.length ? 'FAIL ' : 'OK   ') + '«' + sep + '» ' + fsoMode + ' · ' + c.objName + ' ' + c.month + ' · квитанция без сч. ' +
-      receipt.toFixed(2) + (bad.length ? ' · ' + bad.join('; ') : ''));
+      receipt.toFixed(2) + ' · цена Гкал ' + (c.price === null ? '—' : c.price) + (bad.length ? ' · ' + bad.join('; ') : ''));
     if (bad.length) failed++;
   });
 });
