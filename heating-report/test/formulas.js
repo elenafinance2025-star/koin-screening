@@ -26,11 +26,13 @@ inputs.push({ rowNum: 9, values: ['Ноябрь', 'ЛП', 250000, 0, 20000, '', 
 inputs.forEach(function (inp) { inp.values.forEach(function (v, j) { sheets['ВВОД'][ctx.indexToCol_(j + 1) + inp.rowNum] = v; }); });
 
 var failed = 0;
-['пропорционально газу', 'в содержание котельной'].forEach(function (fsoMode) {
+[[',', 'пропорционально газу'], [';', 'пропорционально газу'], [';', 'в содержание котельной']].forEach(function (mode) {
+  var sep = mode[0], fsoMode = mode[1];
   var cfg = ctx.readSettingsFromRows = null;
   var parsed = ctx.parseSettingsValues_(settingsRows);
   cfg = ctx.validateSettings_(parsed);
   cfg.params.fsoMode = fsoMode;
+  cfg.formulaSep = sep;
   var res = ctx.computeAll_(cfg, inputs, function (obj, m) { return { value: obj.name === 'ЛП' ? 10.23856553 : boil[m] }; });
   var det = sheets['ДЕТАЛИ РАСЧЁТА'] = {};
   var first = 4, olHeader = first + res.rows.length + 2, olRow = {};
@@ -49,12 +51,13 @@ var failed = 0;
   function evalF(sheet, f) {
     var js = f.replace(/'([^']+)'!\$?([A-Z]+)\$?(\d+)/g, function (_, sh, col, row) { return 'V(' + JSON.stringify(sh) + ',"' + col + row + '")'; })
       .replace(/(^|[^A-Za-z"])([A-Z]{1,2})(\d+)(?![\d"])/g, function (_, pre, col, row) { return pre + 'V(' + JSON.stringify(sheet) + ',"' + col + row + '")'; })
-      .replace(/\^/g, '**').replace(/ROUND\(/g, 'R(').replace(/\bN\(/g, 'NN(');
+      .replace(/;/g, ',').replace(/\^/g, '**').replace(/ROUND\(/g, 'R(').replace(/\bN\(/g, 'NN(');
     return Function('V', 'R', 'NN', 'return ' + js)(val, function (x, d) { return ctx.round_(x, d); }, function (x) { return Number(x) || 0; });
   }
   var cols = { E: 'base', F: 'norm', H: 'fsoMzk', K: 'price', L: 'restGkal', M: 'tNo', N: 'tSpch', P: 'charged', Q: 'diff', R: 'tol' };
   res.rows.forEach(function (c, k) {
     var r = first + k, bad = [];
+    if (sep === ';') rows[k].forEach(function (f) { if (typeof f === 'string' && /ROUND\([^;]*,/.test(f)) bad.push('запятая в формуле: ' + f); });
     Object.keys(cols).forEach(function (col) {
       var exp = c[cols[col]];
       if (exp === null) return;
@@ -62,7 +65,7 @@ var failed = 0;
       if (Math.abs(got - exp) > 1e-6 * Math.max(1, Math.abs(exp))) bad.push(col + ': формула ' + got + ' ≠ скрипт ' + exp);
     });
     var receipt = val('ДЕТАЛИ РАСЧЁТА', 'O' + r);
-    console.log((bad.length ? 'FAIL ' : 'OK   ') + fsoMode + ' · ' + c.objName + ' ' + c.month + ' · квитанция без сч. ' +
+    console.log((bad.length ? 'FAIL ' : 'OK   ') + '«' + sep + '» ' + fsoMode + ' · ' + c.objName + ' ' + c.month + ' · квитанция без сч. ' +
       receipt.toFixed(2) + (bad.length ? ' · ' + bad.join('; ') : ''));
     if (bad.length) failed++;
   });

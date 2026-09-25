@@ -662,6 +662,7 @@ function recalcReport() {
   var boilerFn = makeBoilerLookup_(ss);
   var result = computeAll_(cfg, inputs, boilerFn);
   writeReport_(ss.getSheetByName(SHEET_REPORT), cfg, result);
+  cfg.formulaSep = formulaSeparator_(ss);
   writeDetails_(ss.getSheetByName(SHEET_DETAILS), cfg, result);
   var bad = result.rows.filter(function (c) { return c.errors.length; }).length;
   ss.toast('Строк: ' + result.rows.length + ', с ошибками: ' + bad, 'Отчёт пересчитан', 8);
@@ -1203,6 +1204,17 @@ function writeDetails_(sheet, cfg, result) {
   sheet.setColumnWidth(W, 360);
 }
 
+/**
+ * Разделитель аргументов в формулах для локали таблицы: в русской, украинской и других локалях
+ * с десятичной запятой Google ждёт «;», в английской — «,».
+ */
+function formulaSeparator_(ss) {
+  var locale = String(ss.getSpreadsheetLocale() || '').toLowerCase();
+  var dotLocales = ['en', 'ja', 'zh', 'ko', 'th', 'he', 'iw', 'hi', 'ms', 'fil', 'ga', 'sw', 'ur', 'bn', 'ta', 'te'];
+  var lang = locale.split(/[_-]/)[0];
+  return dotLocales.indexOf(lang) >= 0 ? ',' : ';';
+}
+
 /** Значение ячейки как формула для setFormulas: текст → ="текст", число → =число. */
 function asFormula_(v) {
   if (v === '' || v === null || v === undefined) return '';
@@ -1233,6 +1245,7 @@ function detailFormulas_(c, cfg, r, olRow) {
   var P = cfg.params;
   var obj = c.obj;
   var common = P.fsoMode === FSO_COMMON;
+  var sep = cfg.formulaSep || ','; // разделитель аргументов: «;» для локалей с десятичной запятой
   var V = function (idx) { return "N('" + SHEET_INPUT + "'!" + indexToCol_(idx + 1) + c.rowNum + ')'; };
   var share = '(1-' + S.fso + '-' + S.mzk + ')';
   var gasAmount = common ? '(E' + r + '-H' + r + ')' : 'E' + r;
@@ -1248,15 +1261,15 @@ function detailFormulas_(c, cfg, r, olRow) {
   var rest = '';
   var tNo;
   if (obj.type === TYPE_AREA) {
-    tNo = '=ROUND(' + gasAmount + '/' + denom + ',' + S.digitsArea + ')';
+    tNo = '=ROUND(' + gasAmount + '/' + denom + sep + S.digitsArea + ')';
   } else {
-    price = '=ROUND(' + gasAmount + '/(F' + r + '*' + share + '),' + S.digitsPrice + ')';
+    price = '=ROUND(' + gasAmount + '/(F' + r + '*' + share + ')' + sep + S.digitsPrice + ')';
     rest = '=F' + r + '*' + share + '-' + V(IN.GKAL_METER);
     tNo = (c.areaNo || 0) + P.kSpch * (c.areaSpch || 0) > 0
-      ? '=ROUND(L' + r + '*' + gasAmount + '/(F' + r + '*' + share + ')/' + denom + ',' + S.digitsArea + ')'
+      ? '=ROUND(L' + r + '*' + gasAmount + '/(F' + r + '*' + share + ')/' + denom + sep + S.digitsArea + ')'
       : 0;
   }
-  var tCommon = common ? '=ROUND(H' + r + '/' + V(IN.AREA_TOTAL) + ',' + S.digitsArea + ')' : '';
+  var tCommon = common ? '=ROUND(H' + r + '/' + V(IN.AREA_TOTAL) + sep + S.digitsArea + ')' : '';
   var totalTerm = common ? '+N(I' + r + ')*' + V(IN.AREA_TOTAL) : '';
   var tolArea = common ? V(IN.AREA_TOTAL) + '+' : '';
   return [
@@ -1273,8 +1286,8 @@ function detailFormulas_(c, cfg, r, olRow) {
     price,
     rest,
     tNo,
-    '=ROUND(M' + r + '*' + S.kSpch + ',' + S.digitsArea + ')',
-    '=ROUND(J' + r + '+N(I' + r + '),' + S.digitsArea + ')+M' + r,
+    '=ROUND(M' + r + '*' + S.kSpch + sep + S.digitsArea + ')',
+    '=ROUND(J' + r + '+N(I' + r + ')' + sep + S.digitsArea + ')+M' + r,
     '=N(K' + r + ')*' + V(IN.GKAL_METER) + '+M' + r + '*' + V(IN.AREA_NO) + '+N' + r + '*' + V(IN.AREA_SPCH) + totalTerm,
     '=P' + r + '-E' + r,
     '=' + S.tol + '+(1/2)*10^(-' + S.digitsArea + ')*(' + tolArea + V(IN.AREA_NO) + '+' + V(IN.AREA_SPCH) + ')+(1/2)*10^(-' +
