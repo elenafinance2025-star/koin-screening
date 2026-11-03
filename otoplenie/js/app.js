@@ -307,7 +307,7 @@
   }
 
   // ---------- Таблицы отчётов ----------
-  function tableEl(t) {
+  function tableEl(t, filterRow) {
     var wrap = h('section', { class: 'card' });
     wrap.appendChild(h('h3', { text: t.title }));
     if (t.note) wrap.appendChild(h('p', { class: 'hint', text: t.note }));
@@ -325,26 +325,106 @@
       });
       tbody.appendChild(tr);
     });
-    wrap.appendChild(h('div', { class: 'scroll' }, [h('table', { class: 'grid' }, [h('thead', {}, [thead]), tbody])]));
+    wrap.appendChild(h('div', { class: 'scroll' }, [h('table', { class: 'grid' }, [h('thead', {}, filterRow ? [thead, filterRow] : [thead]), tbody])]));
     return wrap;
   }
 
-  function filterTable(t) {
-    if (app.filterZk === 'Все') return t;
-    var zkCol = t.headers.indexOf('ЖК');
-    var copy = Object.assign({}, t);
+  // Фильтры отчётов: { 'id таблицы': { 'номер колонки': значение } }; текстовые колонки фильтруются
+  // выбором из списка (Месяц, ЖК, Данные, Показатель…) или поиском по тексту (Статус)
+  function filterSpec(t) {
+    return t.headers.map(function (hd, c) {
+      if (t.formats[c] !== 'text') return null;
+      var vals = [];
+      t.rows.forEach(function (r) {
+        var v = r[c] === null || r[c] === undefined ? '' : String(r[c]);
+        if (vals.indexOf(v) < 0) vals.push(v);
+      });
+      if (c === 0 && t.headers[0].indexOf('Месяц') === 0) {
+        vals.sort(function (a, b) { return ENGINE_MONTHS.indexOf(a) - ENGINE_MONTHS.indexOf(b); });
+      }
+      return vals.length <= 30 && hd !== 'Статус' ? { type: 'select', values: vals } : { type: 'text' };
+    });
+  }
+
+  function applyFilters(t, f) {
     var keep = [];
-    copy.rows = t.rows.filter(function (r, i) { var ok = r[zkCol] === app.filterZk; if (ok) keep.push(i); return ok; });
+    var rows = t.rows.filter(function (r, i) {
+      var ok = Object.keys(f).every(function (c) {
+        var want = f[c];
+        if (want === '' || want === undefined) return true;
+        var v = r[c] === null || r[c] === undefined ? '' : String(r[c]);
+        return want.charAt(0) === '~' ? v.toLowerCase().indexOf(want.substring(1).toLowerCase()) >= 0 : v === want;
+      });
+      if (ok) keep.push(i);
+      return ok;
+    });
+    var copy = Object.assign({}, t, { rows: rows });
     if (t.rowFormats) copy.rowFormats = keep.map(function (i) { return t.rowFormats[i]; });
     return copy;
   }
 
   function renderReport(main, id) {
     var t = app.calc.tables.filter(function (x) { return x.id === id; })[0];
-    main.appendChild(h('div', { class: 'bar' }, [zkSelect(app.filterZk, function (v) { app.filterZk = v; render(); }, true),
-      h('button', { text: 'Скачать всё в Excel', onclick: downloadExcel })]));
-    main.appendChild(tableEl(filterTable(t)));
+    app.filters = app.filters || {};
+    var f = app.filters[id] = app.filters[id] || {};
+    var spec = filterSpec(t);
+    var shown = applyFilters(t, f);
+    var active = Object.keys(f).filter(function (c) { return f[c]; }).length;
+    main.appendChild(h('div', { class: 'bar' }, [
+      h('span', { class: 'hint', text: 'Показано строк: ' + shown.rows.length + ' из ' + t.rows.length +
+        (active ? ' · фильтров: ' + active : ' · фильтры — в строке под заголовками') }),
+      active ? h('button', { text: 'Сбросить фильтры', onclick: function () { app.filters[id] = {}; render(); } }) : null,
+      h('button', { text: 'Эта таблица в Excel', onclick: function () {
+        window.XLSX.writeFile(exportWorkbook([shown], window.XLSX), 'КОІН_' + t.title.substring(0, 40).replace(/[^\wА-Яа-яІіЇїЄєҐґ]+/g, '_') + '.xlsx');
+      } }),
+      h('button', { text: 'Скачать всё в Excel', onclick: downloadExcel })
+    ]));
+    var filterRow = h('tr', { class: 'filters' }, spec.map(function (sp, c) {
+      if (!sp) return h('th');
+      if (sp.type === 'select') {
+        var s = h('select', { 'aria-label': 'Фильтр: ' + t.headers[c], onchange: function () { f[c] = s.value; render(); } },
+          [h('option', { value: '', text: 'Все' })].concat(sp.values.map(function (v) {
+            return h('option', { value: v, text: v || '(пусто)', selected: f[c] === v ? 'selected' : null });
+          })));
+        return h('th', {}, [s]);
+      }
+      var inp = h('input', { type: 'search', placeholder: 'поиск…', 'aria-label': 'Поиск: ' + t.headers[c],
+        value: f[c] ? f[c].substring(1) : '', onchange: function () { f[c] = inp.value ? '~' + inp.value : ''; render(); } });
+      return h('th', {}, [inp]);
+    }));
+    main.appendChild(tableEl(shown, filterRow));
+    if (TABLE_LEGENDS[id]) {
+      main.appendChild(h('section', { class: 'card' }, [h('h3', { text: 'Что в колонках' }),
+        h('dl', { class: 'legend' }, TABLE_LEGENDS[id].reduce(function (acc, x) {
+          return acc.concat([h('dt', { text: x[0] }), h('dd', { text: x[1] })]);
+        }, []))]));
+    }
   }
+
+  var TABLE_LEGENDS = {
+    overlimit: [
+      ['План: в счёте', 'Сверхлимит, который по плану сидит в счёте поставщика этого месяца (обычно весь — в марте).'],
+      ['План: начислено в тарифах', 'Сколько сверхлимита по плану включено в тарифы этого месяца: надбавка μ × Гкал по квартирным счётчикам + добавка сглаживания на квартиры без счётчиков и СПЧ.'],
+      ['План: в счетах нараст.', 'Сверхлимит в счетах нарастающим итогом с ноября.'],
+      ['План: начислено нараст.', 'Начисленный в тарифах сверхлимит нарастающим итогом с ноября. К марту равен сверхлимиту сезона.'],
+      ['Рабочие: …', 'То же по рабочим данным: факт там, где счёт уже введён, иначе план (см. колонку «Данные»).'],
+      ['Осталось разнести', 'Сверхлимит сезона минус уже начисленный нарастающим итогом: сколько ещё войдёт в тарифы следующих месяцев. В марте — 0.'],
+      ['Данные', '«факт» — месяц посчитан по введённому счёту, «план» — по плановым данным.']
+    ],
+    tariffs: [
+      ['Содержание котельной', 'Тариф кошториса, грн/м²; в ноябре — 50 %.'],
+      ['Газ по счётчику', 'Цена 1 Гкал для квартир с распределительными счётчиками (с надбавкой сверхлимита).'],
+      ['Газ без счётчика / СПЧ', 'Тариф за 1 м² для квартир без счётчиков и для отключённых (СПЧ, коэффициент из Настроек).'],
+      ['Расчётно начислено', 'Цена Гкал × Гкал счётчиков + тариф без счётчика × площадь без счётчиков + тариф СПЧ × площадь СПЧ.'],
+      ['Расхождение', 'Начислено минус база месяца (счёт без сверхлимита + сверхлимит, отнесённый на месяц); только округление.']
+    ],
+    accrual: [
+      ['Котельная', 'Тариф кошториса × площадь × доля месяца (ноябрь 50 %). План — зафиксированный кошторис, факт — последняя загрузка смет.'],
+      ['Газ, норматив, счёт', 'Объём газа (тыс. м³), норматив тепла (Гкал), счёт поставщика: план, факт и отклонение.'],
+      ['Начислено газ', 'Сумма начислений жильцам по газовым тарифам месяца.'],
+      ['Δ', 'Факт минус план; показывается только для месяцев с введённым фактом.']
+    ]
+  };
 
   // ---------- Кошторис ----------
   function renderKosht(main) {

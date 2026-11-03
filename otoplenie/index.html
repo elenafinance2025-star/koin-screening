@@ -49,6 +49,12 @@ table.grid { border-collapse: collapse; width: 100%; font-size: 13px; }
 .grid td.ok { color: var(--ok); }
 .grid td.warn { color: var(--warn); }
 .grid td.err { color: var(--err); font-weight: 600; }
+.grid tr.filters th { background: var(--surface); padding: 4px 6px; }
+.grid tr.filters select, .grid tr.filters input { width: 100%; min-width: 80px; padding: 3px 4px; font-size: 12px; }
+.legend { display: grid; grid-template-columns: minmax(160px, 240px) 1fr; gap: 6px 14px; margin: 0; font-size: 13px; }
+.legend dt { font-weight: 600; }
+.legend dd { margin: 0; color: var(--muted); }
+@media (max-width: 640px) { .legend { grid-template-columns: 1fr; } .legend dd { margin-bottom: 6px; } }
 .grid td.lbl { font-weight: 600; white-space: nowrap; }
 .grid td.calc { text-align: right; color: var(--muted); white-space: nowrap; }
 .grid.input input { width: 100%; min-width: 90px; background: var(--input); }
