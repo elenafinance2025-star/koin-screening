@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>КОІН · Отопление</title>
+<meta name="robots" content="noindex">
+<style>
+:root {
+  --bg: #f6f7f9; --surface: #ffffff; --text: #1d2330; --muted: #5d6676; --line: #dfe3ea;
+  --accent: #1f5fbf; --accent-text: #ffffff; --ok: #1e7a3c; --warn: #9a5b00; --err: #b3261e;
+  --input: #fff8db; --head: #eef1f6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14171c; --surface: #1c2027; --text: #e6e9ef; --muted: #9aa3b2; --line: #2e343e;
+    --accent: #6ea2ff; --accent-text: #0b1220; --ok: #5cc98a; --warn: #f0b860; --err: #ff8a80;
+    --input: #2a2614; --head: #232833;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--surface); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; }
+header h1 { font-size: 17px; margin: 0; white-space: nowrap; }
+#busy { color: var(--muted); font-size: 13px; }
+#tabs { display: flex; gap: 4px; flex-wrap: wrap; padding: 8px 16px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.tab { border: 1px solid transparent; background: none; color: var(--text); padding: 6px 10px; border-radius: 6px; cursor: pointer; font: inherit; }
+.tab.active { background: var(--head); border-color: var(--line); font-weight: 600; }
+.tab.logout { margin-left: auto; color: var(--muted); }
+main { padding: 16px; max-width: 1500px; margin: 0 auto; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; }
+.card h3 { margin: 0 0 6px; font-size: 15px; }
+.card h4 { margin: 14px 0 6px; font-size: 14px; }
+.hint { color: var(--muted); font-size: 13px; margin: 4px 0 10px; }
+.bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 0 0 12px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; background: var(--surface); color: var(--text); padding: 6px 14px; cursor: pointer; font: inherit; }
+.seg button.on { background: var(--accent); color: var(--accent-text); }
+button { font: inherit; padding: 7px 12px; border-radius: 7px; border: 1px solid var(--line); background: var(--surface); color: var(--text); cursor: pointer; }
+button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+button.small { padding: 3px 8px; font-size: 12px; }
+input, select, textarea { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--text); max-width: 100%; }
+textarea { width: 100%; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+.scroll { overflow-x: auto; }
+table.grid { border-collapse: collapse; width: 100%; font-size: 13px; }
+.grid th { background: var(--head); text-align: left; font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: bottom; }
+.grid td { padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.grid td.n { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.grid td.ok { color: var(--ok); }
+.grid td.warn { color: var(--warn); }
+.grid td.err { color: var(--err); font-weight: 600; }
+.grid td.lbl { font-weight: 600; white-space: nowrap; }
+.grid td.calc { text-align: right; color: var(--muted); white-space: nowrap; }
+.grid.input input { width: 100%; min-width: 90px; background: var(--input); }
+.grid.input input.num { text-align: right; }
+.grid.input input:disabled { opacity: .6; }
+.form { display: grid; grid-template-columns: minmax(180px, 300px) 1fr; gap: 6px 12px; align-items: center; margin: 8px 0 12px; }
+.login { max-width: 420px; margin: 40px auto; display: grid; gap: 8px; }
+.login input { width: 100%; }
+.toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 8px; opacity: 0; pointer-events: none; transition: opacity .2s; max-width: 90vw; }
+.toast.show { opacity: 1; }
+.toast.bad { background: var(--err); color: #fff; }
+@media (max-width: 640px) {
+  main { padding: 12px 16px; }
+  .form { grid-template-columns: 1fr; }
+  header h1 { font-size: 15px; }
+}
+</style>
+</head>
+<body>
+<header><h1>КОІН · Отопление 2026/27</h1><span id="busy"></span></header>
+<nav id="tabs"></nav>
+<main id="main"></main>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<script src="vendor/xlsx.full.min.js"></script>
+<script src="vendor/docx.umd.js"></script>
+<script src="js/config.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/koshtoris.js"></script>
+<script src="js/reports.js"></script>
+<script src="js/seed.js"></script>
+<script src="js/exports.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
