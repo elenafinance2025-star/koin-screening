@@ -396,8 +396,9 @@
     if (t.note) wrap.appendChild(h('p', { class: 'hint', text: t.note }));
     var thead = h('tr', {}, t.headers.map(function (x) { return h('th', { text: x }); }));
     var tbody = h('tbody');
+    var totals = t.totalIdx || [];
     t.rows.forEach(function (r, i) {
-      var tr = h('tr');
+      var tr = h('tr', { class: totals.indexOf(i) >= 0 ? 'subtotal' : null });
       r.forEach(function (v, c) {
         var f = t.formats[c] === 'x' && t.rowFormats ? t.rowFormats[i] : t.formats[c];
         var cls = typeof v === 'number' ? 'n' : '';
@@ -451,10 +452,11 @@
     app.filters = app.filters || {};
     var f = app.filters[id] = app.filters[id] || {};
     var spec = filterSpec(t);
-    var shown = applyFilters(t, f);
+    var filtered = applyFilters(t, f);
+    var shown = REP_SUBTOTAL_IDS.indexOf(id) >= 0 ? repWithSubtotals(filtered) : filtered;
     var active = Object.keys(f).filter(function (c) { return f[c]; }).length;
     main.appendChild(h('div', { class: 'bar' }, [
-      h('span', { class: 'hint', text: 'Показано строк: ' + shown.rows.length + ' из ' + t.rows.length +
+      h('span', { class: 'hint', text: 'Показано строк: ' + filtered.rows.length + ' из ' + t.rows.length +
         (active ? ' · фильтров: ' + active : ' · фильтры — в строке под заголовками') }),
       active ? h('button', { text: 'Сбросить фильтры', onclick: function () { app.filters[id] = {}; render(); } }) : null,
       h('button', { text: 'Эта таблица в Excel', onclick: function () {
@@ -595,7 +597,7 @@
 
   // ---------- Приказ и Excel ----------
   function downloadExcel() {
-    var tables = app.calc.tables.concat(Object.keys(app.ctx.koshtFact).map(function (zk) { return repKoshtTable(zk, app.ctx.koshtFact[zk]); }));
+    var tables = app.calc.tables.map(function (t) { return REP_SUBTOTAL_IDS.indexOf(t.id) >= 0 ? repWithSubtotals(t) : t; }).concat(Object.keys(app.ctx.koshtFact).map(function (zk) { return repKoshtTable(zk, app.ctx.koshtFact[zk]); }));
     var wb = exportWorkbook(tables, window.XLSX);
     var d = new Date();
     var stamp = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);

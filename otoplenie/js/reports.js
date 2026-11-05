@@ -242,3 +242,57 @@ function repKoshtTable(zk, k) {
     rows: rows
   };
 }
+
+/** Отчёты, в которых под каждым ЖК выводится строка «Итого». */
+var REP_SUBTOTAL_IDS = ['tariffs', 'accrual', 'overlimit'];
+
+/**
+ * Строки «Итого» под каждым ЖК и общий итог. Деньги и объёмы суммируются; тарифы, цены и проценты — нет;
+ * колонки «нараст.», «Накоплено», «Остаток», «Осталось» берутся по последнему месяцу ЖК.
+ * Возвращает копию таблицы; индексы итоговых строк — в totalIdx.
+ */
+function repWithSubtotals(t) {
+  var zkCol = t.headers.indexOf('ЖК');
+  if (zkCol < 0 || !t.rows.length) return t;
+  var sumFmt = ['money', 'num3', 'num4'];
+  var lastOnly = /нараст|Накоплено|Остаток|Осталось/;
+  var total = function (rows, label, zk) {
+    var out = t.headers.map(function () { return ''; });
+    out[0] = label;
+    out[zkCol] = zk;
+    t.headers.forEach(function (hd, c) {
+      if (c === 0 || c === zkCol || sumFmt.indexOf(t.formats[c]) < 0) return;
+      var nums = rows.map(function (r) { return r[c]; }).filter(function (v) { return typeof v === 'number'; });
+      if (!nums.length) return;
+      out[c] = lastOnly.test(hd) ? nums[nums.length - 1] : nums.reduce(function (s, x) { return s + x; }, 0);
+    });
+    return out;
+  };
+  var rows = [], totalIdx = [], groups = [], cur = null;
+  t.rows.forEach(function (r) {
+    if (!cur || cur.zk !== r[zkCol]) { cur = { zk: r[zkCol], rows: [] }; groups.push(cur); }
+    cur.rows.push(r);
+  });
+  groups.forEach(function (g) {
+    g.rows.forEach(function (r) { rows.push(r); });
+    if (g.rows.length > 1) { totalIdx.push(rows.length); rows.push(total(g.rows, 'Итого', g.zk)); }
+  });
+  if (groups.length > 1) {
+    totalIdx.push(rows.length);
+    // общий итог: суммы по всем строкам; «нараст.» — сумма последних значений ЖК
+    var lastRows = groups.map(function (g) { return g.rows[g.rows.length - 1]; });
+    var all = total(t.rows, 'Итого по всем ЖК', '');
+    t.headers.forEach(function (hd, c) {
+      if (lastOnly.test(hd) && sumFmt.indexOf(t.formats[c]) >= 0) {
+        var nums = lastRows.map(function (r) { return r[c]; }).filter(function (v) { return typeof v === 'number'; });
+        all[c] = nums.length ? nums.reduce(function (s, x) { return s + x; }, 0) : '';
+      }
+    });
+    rows.push(all);
+  }
+  var copy = {};
+  Object.keys(t).forEach(function (k) { copy[k] = t[k]; });
+  copy.rows = rows;
+  copy.totalIdx = totalIdx;
+  return copy;
+}

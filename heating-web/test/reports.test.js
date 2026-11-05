@@ -25,6 +25,15 @@ check('сверхлимит Лимноса: начислено нараст. в 
   Math.abs(lim[4][14] - 650000) < 0.01 && Math.abs(lim[4][15]) < 0.01);
 var acc = res.tables[1].rows[0];
 check('котельная Лимнос ноябрь план = 11,47 × 0,5 × 25 162,6 (' + acc[2].toFixed(2) + ')', Math.abs(acc[2] - 11.47 * 0.5 * 25162.6) < 0.01);
+var sub = ctx.repWithSubtotals(res.tables[1]);
+var limTot = sub.rows[sub.totalIdx[0]];
+var limRows = res.tables[1].rows.filter(function (r) { return r[1] === 'Лимнос'; });
+var billSum = limRows.reduce(function (s, r) { return s + r[11]; }, 0);
+check('итоги: строка «Итого» под Лимносом, счёт план = сумма месяцев (' + limTot[11].toFixed(2) + ')', limTot[0] === 'Итого' && limTot[1] === 'Лимнос' && Math.abs(limTot[11] - billSum) < 0.01);
+check('итоги: «ЗАПАС план нараст.» = значение марта', limTot[18] === limRows[4][18]);
+check('итоги: 4 итога по ЖК + общий итог', sub.totalIdx.length === 5 && sub.rows[sub.rows.length - 1][0] === 'Итого по всем ЖК');
+var ols = ctx.repWithSubtotals(res.tables[2]);
+check('итоги сверхлимита: «Осталось разнести» по Лимносу = 0 (март)', Math.abs(ols.rows[ols.totalIdx[0]][15]) < 0.01);
 check('кошторис-таблица', ctx.repKoshtTable('Лимнос', kosht['Лимнос']).rows.length === 13);
 console.log(failed ? '\nПРОВАЛЕНО: ' + failed : '\nОтчёты собраны');
 process.exit(failed ? 1 : 0);
