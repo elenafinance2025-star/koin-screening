@@ -110,6 +110,7 @@ function engineCompute(inputRows, settings, journal, closed) {
     var z = S.zk[r.zk] || {};
     r.smoothRest = S.smoothingOn === 1 && z.smoothRest === 'по профилю' ? 1 : 0;                     // AL
     r.olProfile = S.smoothingOn === 1 && (z.olProfile || 'по профилю') === 'по профилю' ? 1 : 0;     // AM
+    r.smoothPrice = S.smoothingOn === 1 && z.smoothPrice === 'одна на сезон' ? 1 : 0;              // доп. режим
     r.weight = r.valid && r.monthIdx >= 0 ? S.weights[r.monthIdx] : 0;                              // W
   });
 
@@ -177,9 +178,23 @@ function engineCompute(inputRows, settings, journal, closed) {
       if (q.status !== 'закрыт') denOpen += q.reduced * q.weight;
     });
     var restAfterJournal = totalNo - (journal[zk] || 0);
+    // Одна цена Гкал на сезон для квартир со счётчиками (режим «одна на сезон»; не для покупного тепла):
+    // P = (стоимость Гкал счётчиков за сезон − уже начисленное в закрытых месяцах) ÷ Гкал счётчиков открытых месяцев
+    var flatPrice = null;
+    if (g.some(function (q) { return q.smoothPrice === 1; }) && !g.some(function (q) { return q.fixed === 1; })) {
+      var meterCost = 0, closedMeter = 0, openGk = 0;
+      g.forEach(function (q) {
+        if (!(q.valid && q.areaMeter > 0)) return;
+        meterCost += q.priceRaw * q.gkMeter;
+        var c = closed[q.zk + '|' + q.month];
+        if (q.status === 'закрыт' && c) closedMeter += c.price * q.gkMeter;
+        else openGk += q.gkMeter;
+      });
+      if (openGk > 0) flatPrice = engineRound((meterCost - closedMeter) / openGk, dP);
+    }
     g.forEach(function (r) {
       var key = r.zk + '|' + r.month;
-      r.price = r.valid && r.areaMeter > 0 ? engineRound(r.priceRaw, dP) : 0;                       // AB
+      r.price = r.valid && r.areaMeter > 0 ? (flatPrice !== null ? flatPrice : engineRound(r.priceRaw, dP)) : 0; // AB
       if (r.smoothRest === 1 && r.status !== 'закрыт' && r.weight > 0 && r.reduced > 0 && denOpen > 0) {
         var unit = restAfterJournal / denOpen;
         r.tNo = engineRound(unit * r.weight, dA);                                                   // AC
@@ -201,14 +216,22 @@ function engineCompute(inputRows, settings, journal, closed) {
         (r.fixed ? (r.costNo + r.addSmooth) / S.fixedPrice / r.reduced / r.perM2Meter :
           r.volNo / r.reduced / r.perM2Meter) : null;                                               // AH
     });
-    // Сезонная сверка для режима сглаживания остатка
-    var seasonCharged = 0, seasonTol = 0;
+    // Сезонная сверка (режимы сглаживания по сезону): без счётчиков — как в Excel (AJ),
+    // плюс счётчики при единой цене Гкал: начислено по цене P − стоимость Гкал счётчиков за сезон
+    var seasonCharged = 0, seasonTol = 0, meterDiff = 0;
     g.forEach(function (q) {
       if (q.status !== 'закрыт') seasonCharged += q.tNo * q.areaNo + q.tSpch * q.areaSpch;
       seasonTol += q.tol;
+      if (flatPrice !== null && q.valid && q.areaMeter > 0) meterDiff += (q.price - q.priceRaw) * q.gkMeter;
     });
+    var smoothNo = g.some(function (q) { return q.smoothRest === 1; });
     g.forEach(function (r) {
-      r.seasonDiff = seasonCharged - restAfterJournal;
+      r.seasonal = smoothNo || flatPrice !== null;
+      r.flatPrice = flatPrice !== null;
+      r.seasonDiff = (smoothNo ? seasonCharged - restAfterJournal : 0) + meterDiff;
+      if (!smoothNo && flatPrice !== null) {
+        r.seasonDiff = g.reduce(function (s2, q) { return s2 + q.diff; }, 0);
+      }
       r.seasonTol = seasonTol;
     });
   });
@@ -245,11 +268,13 @@ function engineStatus(r, S) {
   if (r.areaSpch + r.areaNo + Math.max(r.areaMeter, 0) === 0 && r.areaTotal > 0) return 'ОШИБКА: не заполнены площади';
   if (r.areaMeter < -S.tolArea || Math.abs(areas - r.areaTotal) > S.tolArea) return 'ОШИБКА: сумма площадей не равна итого';
   var tail = r.warnings.length ? '; ' + r.warnings.join('; ') : '';
-  if (r.smoothRest === 1) {
+  if (r.seasonal) {
     if (Math.abs(r.seasonDiff) > r.seasonTol) {
       return 'ОШИБКА: расхождение за сезон ' + engineFmt(r.seasonDiff, 2) + ' больше допуска ' + engineFmt(r.seasonTol, 2);
     }
-    return '✓ сходится по сезону · сглажено по профилю (расхождение месяца ' + engineFmt(r.diff, 2) + ' грн)' + tail;
+    var what = r.smoothRest === 1 && r.flatPrice ? 'м², СПЧ и цена Гкал сглажены по сезону' :
+      (r.flatPrice ? 'цена Гкал одна на сезон' : 'сглажено по профилю');
+    return '✓ сходится по сезону · ' + what + ' (расхождение месяца ' + engineFmt(r.diff, 2) + ' грн)' + tail;
   }
   if (Math.abs(r.diff) > r.tol) {
     return 'ОШИБКА: расхождение ' + engineFmt(r.diff, 2) + ' больше допуска ' + engineFmt(r.tol, 2);

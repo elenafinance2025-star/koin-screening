@@ -595,12 +595,15 @@
         var s = h('select', { onchange: function () { z[key] = s.value; } }, opts.map(function (o) { return h('option', { value: o, text: o, selected: z[key] === o ? 'selected' : null }); }));
         return s;
       };
+      if (!z.smoothPrice) z.smoothPrice = 'по месяцам';
       modes.appendChild(h('tr', {}, [h('td', { class: 'lbl', text: zk }), h('td', {}, [sel('smoothRest', ['нет', 'по профилю'])]),
+        h('td', {}, [sel('smoothPrice', ['по месяцам', 'одна на сезон'])]),
         h('td', {}, [sel('olProfile', ['по профилю', 'пропорционально'])])]));
     });
     main.appendChild(h('section', { class: 'card' }, [h('h3', { text: 'Параметры методики' }), form,
       h('h4', { text: 'Режимы сглаживания по ЖК' }),
-      h('table', { class: 'grid' }, [h('thead', {}, [h('tr', {}, [h('th', { text: 'ЖК' }), h('th', { text: 'Сглаживание остатка по сезону' }), h('th', { text: 'Распределение сверхлимита' })])]), modes]),
+      h('table', { class: 'grid' }, [h('thead', {}, [h('tr', {}, [h('th', { text: 'ЖК' }), h('th', { text: 'Тариф без счётчика и СПЧ (м²)' }), h('th', { text: 'Цена Гкал по счётчику' }), h('th', { text: 'Распределение сверхлимита' })])]), modes]),
+      h('p', { class: 'hint', text: '«Цена Гкал: одна на сезон» — квартиры со счётчиками платят одну цену 1 Гкал все месяцы: стоимость их Гкал за сезон ÷ Гкал за сезон (закрытые месяцы остаются как были). Для Гавайев цена и так фиксирована городом. Сумма за сезон не меняется, расхождение отдельного месяца — нормально, сверка идёт по сезону.' }),
       h('button', { class: 'primary', text: 'Сохранить параметры', onclick: function () { saveStore('engine', S); } })]));
 
     // Реквизиты
