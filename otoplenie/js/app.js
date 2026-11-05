@@ -3,6 +3,7 @@
   'use strict';
 
   var LS_API = 'koin_api_url', SS_TOKEN = 'koin_token';
+  var SHOW_PLAN_BACKUP_COMPARE = false; // таблица «Сравнение с прежним планом» на вкладке «Ввод → План»
   var app = {
     token: null, data: null, view: 'input', dataset: 'fact', zk: ZK_ORDER[0], filterZk: 'Все',
     calc: null, ctx: null, busy: false
@@ -339,7 +340,8 @@
       h('span', { class: 'hint', text: 'Газ — в тыс. м³, как в счетах Одесагаза. «Со счётчиками» = итого − СПЧ − без счётчиков.' })
     ]));
     var bk = store('planBackupManual', null);
-    if (autoPlan && bk) {
+    // Сравнение с прежним (ручным) планом пока скрыто; копия плана хранится (planBackupManual)
+    if (SHOW_PLAN_BACKUP_COMPARE && autoPlan && bk) {
       var calcPlan = gasApplyPlan(app.data.plan, app.ctx.gasTariffs);
       var oldRows = {}, newRows = {};
       bk.rows.forEach(function (r) { if (r.zk === app.zk) oldRows[r.month] = r; });
