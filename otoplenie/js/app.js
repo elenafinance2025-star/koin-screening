@@ -238,16 +238,29 @@
       tr.appendChild(st);
       tbody.appendChild(tr);
     });
-    var table = h('table', { class: 'grid input' }, [h('thead', {}, [thead]), tbody]);
+    // Итого за сезон по суммируемым колонкам (счёт, сверхлимит, газ) — пересчитывается при вводе
+    var TOTAL_COLS = ['bill', 'ol', 'gas'];
+    var totalCells = {};
+    var tfootRow = h('tr', { class: 'total' }, [h('td', { class: 'lbl', text: 'Итого' })].concat(INPUT_COLS.map(function (c) {
+      var td = h('td', { class: 'n' });
+      if (TOTAL_COLS.indexOf(c[0]) >= 0) totalCells[c[0]] = td;
+      return td;
+    })).concat([h('td'), h('td'), h('td')]));
+    var table = h('table', { class: 'grid input' }, [h('thead', {}, [thead]), tbody, h('tfoot', {}, [tfootRow])]);
     main.appendChild(h('div', { class: 'scroll' }, [table]));
     function updateMeterArea() {
+      var sums = { bill: 0, ol: 0, gas: 0 };
       Array.prototype.forEach.call(tbody.children, function (tr) {
         var g = function (f) { return engineNum($('input[data-f="' + f + '"]', tr).value); };
         var v = g('areaTotal') - g('areaSpch') - g('areaNo');
         var cell = $('[data-meter]', tr);
         cell.textContent = g('areaTotal') ? fmt(v, 'money') : '';
         cell.className = 'calc' + (v < -0.5 ? ' err' : '');
+        TOTAL_COLS.forEach(function (f) { sums[f] += g(f); });
       });
+      totalCells.bill.textContent = fmt(sums.bill, 'money');
+      totalCells.ol.textContent = fmt(sums.ol, 'money');
+      totalCells.gas.textContent = fmt(sums.gas, 'num4');
     }
     updateMeterArea();
     main.appendChild(h('div', { class: 'bar' }, [
