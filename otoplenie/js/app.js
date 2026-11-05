@@ -254,8 +254,8 @@
       tr.appendChild(st);
       tbody.appendChild(tr);
     });
-    // Итого за сезон по суммируемым колонкам (счёт, сверхлимит, газ) — пересчитывается при вводе
-    var TOTAL_COLS = ['bill', 'ol', 'gas'];
+    // Итого за сезон по суммируемым колонкам (счёт, сверхлимит, газ, Гкал ОДПУ) — пересчитывается при вводе
+    var TOTAL_COLS = ['bill', 'ol', 'gas', 'gkalHouse'];
     var totalCells = {};
     var tfootRow = h('tr', { class: 'total' }, [h('td', { class: 'lbl', text: 'Итого' })].concat(INPUT_COLS.map(function (c) {
       var td = h('td', { class: 'n' });
@@ -303,7 +303,7 @@
           (app.dataset === 'fact' ? ' Колонка «По объёму и ценам» — каким должен быть счёт; жёлтым — если введённый счёт отличается больше чем на 1 %.' :
             ' Счёт и сверхлимит плана считаются автоматически из объёма газа.');
       }
-      var sums = { bill: 0, ol: 0, gas: 0 };
+      var sums = { bill: 0, ol: 0, gas: 0, gkalHouse: 0 };
       Array.prototype.forEach.call(tbody.children, function (tr) {
         var g = function (f) { return engineNum($('input[data-f="' + f + '"]', tr).value); };
         var v = g('areaTotal') - g('areaSpch') - g('areaNo');
@@ -315,6 +315,7 @@
       totalCells.bill.textContent = fmt(sums.bill, 'money');
       totalCells.ol.textContent = fmt(sums.ol, 'money');
       totalCells.gas.textContent = fmt(sums.gas, 'num4');
+      totalCells.gkalHouse.textContent = fmt(sums.gkalHouse, 'num3');
     }
     updateMeterArea();
     main.appendChild(h('div', { class: 'bar' }, [
