@@ -93,9 +93,15 @@ function repTariffs(calc, koshtFact) {
 /** 2. Отчёт по начислению: содержание котельной и газ, план / факт / отклонение. */
 function repAccrual(planCalc, workCalc, factIdx, koshtPlan, koshtFact) {
   var pIdx = repIndex(planCalc);
+  var reserveAcc = {}, reservePlanAcc = {};
   var rows = workCalc.map(function (w) {
     var p = pIdx[repKey(w)] || {};
     var isFact = repHasFact(factIdx[repKey(w)]);
+    // Запас = начислено жильцам по газовым тарифам − счёт поставщика (плюс — собрано больше счёта, минус — меньше)
+    var reservePlan = engineNum(p.charged) - engineNum(p.bill);
+    var reserveFact = isFact ? w.charged - w.bill : '';
+    reservePlanAcc[w.zk] = (reservePlanAcc[w.zk] || 0) + reservePlan;
+    if (isFact) reserveAcc[w.zk] = (reserveAcc[w.zk] || 0) + reserveFact;
     var share = koshtMonthShare(w.monthIdx);
     var boilerPlan = repKoshtTariff(koshtPlan, w.zk) * share * repKoshtArea(koshtPlan, w.zk);
     var boilerFact = repKoshtTariff(koshtFact, w.zk) * share * repKoshtArea(koshtFact, w.zk);
@@ -106,7 +112,8 @@ function repAccrual(planCalc, workCalc, factIdx, koshtPlan, koshtFact) {
       engineNum(p.gas), f(w.gas), d(w.gas, engineNum(p.gas)),
       engineNum(p.norm), f(w.norm), d(w.norm, engineNum(p.norm)),
       engineNum(p.bill), f(w.bill), d(w.bill, engineNum(p.bill)),
-      engineNum(p.charged), f(w.charged), d(w.charged, engineNum(p.charged))];
+      engineNum(p.charged), f(w.charged), d(w.charged, engineNum(p.charged)),
+      reservePlan, reservePlanAcc[w.zk], reserveFact, isFact ? reserveAcc[w.zk] : ''];
   });
   return {
     id: 'accrual', title: 'Начисление: содержание котельной и расход газа (план / факт)',
@@ -116,9 +123,10 @@ function repAccrual(planCalc, workCalc, factIdx, koshtPlan, koshtFact) {
       'Газ план, тыс. м³', 'Газ факт, тыс. м³', 'Газ Δ, тыс. м³',
       'Норматив план, Гкал', 'Норматив факт, Гкал', 'Норматив Δ, Гкал',
       'Счёт план, грн', 'Счёт факт, грн', 'Счёт Δ, грн',
-      'Начислено газ план, грн', 'Начислено газ факт, грн', 'Начислено газ Δ, грн'],
+      'Начислено газ план, грн', 'Начислено газ факт, грн', 'Начислено газ Δ, грн',
+      'ЗАПАС план, грн', 'ЗАПАС план нараст., грн', 'ЗАПАС факт, грн', 'ЗАПАС факт нараст., грн'],
     formats: ['text', 'text', 'money', 'money', 'money', 'num4', 'num4', 'num4', 'num3', 'num3', 'num3',
-      'money', 'money', 'money', 'money', 'money', 'money'],
+      'money', 'money', 'money', 'money', 'money', 'money', 'money', 'money', 'money', 'money'],
     rows: rows
   };
 }
