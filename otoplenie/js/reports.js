@@ -47,8 +47,12 @@ function repSortRows(rows) {
  */
 function repBuildAll(ctx) {
   var S = ctx.settings;
-  var planCalc = repSortRows(engineCompute(ctx.plan, S, {}, {}));
-  var work = repMerge(ctx.plan, ctx.fact);
+  // Газ по сезонному лимиту (gas.js): план — счёт и сверхлимит из объёма; рабочие — прогноз от факта
+  var useGas = ctx.gasTariffs && typeof gasApplyPlan === 'function';
+  var plan = useGas ? gasApplyPlan(ctx.plan, ctx.gasTariffs) : ctx.plan;
+  var planCalc = repSortRows(engineCompute(plan, S, {}, {}));
+  var work = repMerge(plan, ctx.fact);
+  if (useGas) work = gasApplyWork(work, ctx.gasTariffs);
   var workCalc = repSortRows(engineCompute(work, S, ctx.journal || {}, ctx.closed || {}));
   var factIdx = repIndex(ctx.fact || []);
   var planIdx = repIndex(planCalc);
@@ -142,7 +146,9 @@ function repOverlimit(planIdx, workCalc, factIdx) {
     a.bill += w.ol;
     a.charged += w.olCharged;
     var season = w.olSeason;
+    var g = w.gasInfo;
     return [w.month, w.zk, w.source || 'план',
+      g ? g.volume : '', g ? g.cum : '', g ? g.limitLeft : '', g ? g.over : '',
       engineNum(p.ol), engineNum(p.olCharged), a.billPlan, a.chargedPlan,
       w.ol, w.olCharged, a.bill, a.charged, season - a.charged];
   });
@@ -150,10 +156,12 @@ function repOverlimit(planIdx, workCalc, factIdx) {
     id: 'overlimit', title: 'Сверхлимит газа: выставлено в счетах и начислено в тарифах',
     note: 'Начислено в тарифах = надбавка μ × Гкал по счётчикам + добавка сглаживания на квартиры без счётчиков и СПЧ. «Осталось разнести» = сверхлимит сезона − начислено нарастающим итогом.',
     headers: ['Месяц', 'ЖК', 'Данные',
+      'Газ, тыс. м³', 'Накоплено с ноября, тыс. м³', 'Остаток лимита, тыс. м³', 'Сверх лимита, тыс. м³',
       'План: в счёте, грн', 'План: начислено в тарифах, грн', 'План: в счетах нараст., грн', 'План: начислено нараст., грн',
       'Рабочие: в счёте, грн', 'Рабочие: начислено в тарифах, грн', 'Рабочие: в счетах нараст., грн',
       'Рабочие: начислено нараст., грн', 'Осталось разнести, грн'],
-    formats: ['text', 'text', 'text', 'money', 'money', 'money', 'money', 'money', 'money', 'money', 'money', 'money'],
+    formats: ['text', 'text', 'text', 'num4', 'num4', 'num4', 'num4',
+      'money', 'money', 'money', 'money', 'money', 'money', 'money', 'money', 'money'],
     rows: rows
   };
 }

@@ -84,7 +84,8 @@ function engineCompute(inputRows, settings, journal, closed) {
       month: src.month, zk: src.zk, note: src.note || '', status: src.status || 'план', source: src.source || '',
       bill: engineNum(src.bill), ol: engineNum(src.ol), gas: engineNum(src.gas), gkalHouse: engineNum(src.gkalHouse),
       areaTotal: engineNum(src.areaTotal), areaSpch: engineNum(src.areaSpch), areaNo: engineNum(src.areaNo),
-      gkMeter: engineNum(src.gkMeter)
+      gkMeter: engineNum(src.gkMeter),
+      warn: src.warn || '', gasInfo: src.gasInfo || null
     };
     r.areaMeter = r.areaTotal - r.areaSpch - r.areaNo;
     r.monthIdx = ENGINE_MONTHS.indexOf(r.month);
@@ -256,6 +257,7 @@ function engineWarnings(r, S) {
   if (r.ratio !== null && r.ratio > S.highBound) {
     w.push('удельный объём без счётчиков выше ' + S.highBound + '× среднего со счётчиками');
   }
+  if (r.warn) w.push(r.warn);
   if (r.note) w.push(r.note);
   return w;
 }

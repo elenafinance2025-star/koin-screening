@@ -21,8 +21,8 @@ var tar = res.tables[0];
 check('источник: Лимнос ноябрь = факт, март = план', tar.rows[0][3] === 'факт' && tar.rows[4][3] === 'план');
 var ol = res.tables[2];
 var lim = ol.rows.filter(function (r) { return r[1] === 'Лимнос'; });
-check('сверхлимит Лимноса: начислено нараст. в марте = сверхлимиту сезона (' + lim[4][10].toFixed(2) + ')',
-  Math.abs(lim[4][10] - 650000) < 0.01 && Math.abs(lim[4][11]) < 0.01);
+check('сверхлимит Лимноса: начислено нараст. в марте = сверхлимиту сезона (' + lim[4][14].toFixed(2) + ')',
+  Math.abs(lim[4][14] - 650000) < 0.01 && Math.abs(lim[4][15]) < 0.01);
 var acc = res.tables[1].rows[0];
 check('котельная Лимнос ноябрь план = 11,47 × 0,5 × 25 162,6 (' + acc[2].toFixed(2) + ')', Math.abs(acc[2] - 11.47 * 0.5 * 25162.6) < 0.01);
 check('кошторис-таблица', ctx.repKoshtTable('Лимнос', kosht['Лимнос']).rows.length === 13);
