@@ -302,25 +302,35 @@ function repWithSubtotals(t) {
  */
 function repPlanFactTotals(t) {
   if (!t.rows.length) return t;
-  var groups = [], idx = {};
+  var srcFm = t.rowFormats || t.rows.map(function () { return 'money'; });
+  // блоки подряд идущих строк одного ЖК; итоги по показателям — сразу под блоком ЖК
+  var blocks = [], cur = null;
   t.rows.forEach(function (r, i) {
-    var f = t.rowFormats ? t.rowFormats[i] : 'money';
-    if (f === 'tariff') return;
-    var key = r[1] + '|' + r[2];
-    if (!idx[key]) { idx[key] = { zk: r[1], item: r[2], fmt: f, n: 0, plan: 0, fact: 0, planFact: 0, nFact: 0 }; groups.push(idx[key]); }
-    var g = idx[key];
-    g.n++;
-    g.plan += engineNum(r[4]);
-    if (r[3] === 'факт') { g.fact += engineNum(r[5]); g.planFact += engineNum(r[4]); g.nFact++; }
+    if (!cur || cur.zk !== r[1]) { cur = { zk: r[1], idx: [] }; blocks.push(cur); }
+    cur.idx.push(i);
   });
-  var rows = t.rows.slice(), fm = (t.rowFormats || t.rows.map(function () { return 'money'; })).slice(), totalIdx = [];
-  groups.forEach(function (g) {
-    if (g.n < 2) return;
-    totalIdx.push(rows.length);
-    var dev = g.nFact ? g.fact - g.planFact : '';
-    rows.push(['Итого', g.zk, g.item, g.nFact ? 'факт: ' + g.nFact + ' мес.' : 'нет факта', g.plan, g.nFact ? g.fact : '',
-      dev, g.nFact && g.planFact !== 0 ? dev / Math.abs(g.planFact) : '']);
-    fm.push(g.fmt);
+  var rows = [], fm = [], totalIdx = [];
+  blocks.forEach(function (b) {
+    var groups = [], gi = {};
+    b.idx.forEach(function (i) {
+      var r = t.rows[i], f = srcFm[i];
+      rows.push(r);
+      fm.push(f);
+      if (f === 'tariff') return;
+      if (!gi[r[2]]) { gi[r[2]] = { item: r[2], fmt: f, n: 0, plan: 0, fact: 0, planFact: 0, nFact: 0 }; groups.push(gi[r[2]]); }
+      var g = gi[r[2]];
+      g.n++;
+      g.plan += engineNum(r[4]);
+      if (r[3] === 'факт') { g.fact += engineNum(r[5]); g.planFact += engineNum(r[4]); g.nFact++; }
+    });
+    groups.forEach(function (g) {
+      if (g.n < 2) return;
+      totalIdx.push(rows.length);
+      var dev = g.nFact ? g.fact - g.planFact : '';
+      rows.push(['Итого', b.zk, g.item, g.nFact ? 'факт: ' + g.nFact + ' мес.' : 'нет факта', g.plan, g.nFact ? g.fact : '',
+        dev, g.nFact && g.planFact !== 0 ? dev / Math.abs(g.planFact) : '']);
+      fm.push(g.fmt);
+    });
   });
   var copy = {};
   Object.keys(t).forEach(function (k) { copy[k] = t[k]; });

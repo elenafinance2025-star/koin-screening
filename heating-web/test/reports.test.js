@@ -41,6 +41,11 @@ check('план-факт итого: план = сумма 5 месяцев, ф�
   pfTot && Math.abs(pfTot[4] - pfRows.reduce(function (s, r) { return s + r[4]; }, 0)) < 0.01 &&
   Math.abs(pfTot[6] - pfRows.filter(function (r) { return r[3] === 'факт'; }).reduce(function (s, r) { return s + r[6]; }, 0)) < 0.01);
 check('план-факт итого: тарифы не суммируются', !pf.rows.some(function (r) { return r[0] === 'Итого' && /грн\/м²|грн\/Гкал/.test(r[2]); }));
+var pfFirstAtlant = pf.rows.findIndex(function (r) { return r[1] === 'Атлант'; });
+check('план-факт итого: итоги Лимноса стоят под Лимносом, до строк Атланта',
+  pf.rows.slice(0, pfFirstAtlant).filter(function (r) { return r[0] === 'Итого'; }).length > 0 &&
+  pf.rows.slice(pfFirstAtlant).every(function (r) { return r[1] !== 'Лимнос'; }) &&
+  pf.rows[pfFirstAtlant - 1][0] === 'Итого');
 check('начисление: колонок норматива нет', res.tables[1].headers.join('|').indexOf('Норматив') < 0);
 check('кошторис-таблица', ctx.repKoshtTable('Лимнос', kosht['Лимнос']).rows.length === 13);
 console.log(failed ? '\nПРОВАЛЕНО: ' + failed : '\nОтчёты собраны');
