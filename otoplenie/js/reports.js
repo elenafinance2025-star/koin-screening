@@ -136,29 +136,21 @@ function repAccrual(planCalc, workCalc, factIdx, koshtPlan, koshtFact) {
 function repOverlimit(planIdx, workCalc, factIdx) {
   var acc = {};
   var rows = workCalc.map(function (w) {
-    var a = acc[w.zk] = acc[w.zk] || { billPlan: 0, chargedPlan: 0, bill: 0, charged: 0 };
-    var p = planIdx[repKey(w)] || {};
-    a.billPlan += engineNum(p.ol);
-    a.chargedPlan += engineNum(p.olCharged);
+    var a = acc[w.zk] = acc[w.zk] || { bill: 0, charged: 0 };
     a.bill += w.ol;
     a.charged += w.olCharged;
-    var season = w.olSeason;
     var g = w.gasInfo;
     return [w.month, w.zk, w.source || 'план',
-      g ? g.volume : '', g ? g.cum : '', g ? g.limitLeft : '', g ? g.over : '',
-      engineNum(p.ol), engineNum(p.olCharged), a.billPlan, a.chargedPlan,
-      w.ol, w.olCharged, a.bill, a.charged, season - a.charged];
+      g ? g.cum : '', g ? g.limitLeft : '',
+      w.ol, w.olCharged, a.charged - a.bill, w.olSeason - a.charged];
   });
   return {
     id: 'overlimit', title: 'Сверхлимит газа: выставлено в счетах и начислено в тарифах',
-    note: 'Начислено в тарифах = надбавка μ × Гкал по счётчикам + добавка сглаживания на квартиры без счётчиков и СПЧ. «Осталось разнести» = сверхлимит сезона − начислено нарастающим итогом.',
-    headers: ['Месяц', 'ЖК', 'Данные',
-      'Газ, тыс. м³', 'Накоплено с ноября, тыс. м³', 'Остаток лимита, тыс. м³', 'Сверх лимита, тыс. м³',
-      'План: в счёте, грн', 'План: начислено в тарифах, грн', 'План: в счетах нараст., грн', 'План: начислено нараст., грн',
-      'Рабочие: в счёте, грн', 'Рабочие: начислено в тарифах, грн', 'Рабочие: в счетах нараст., грн',
-      'Рабочие: начислено нараст., грн', 'Осталось разнести, грн'],
-    formats: ['text', 'text', 'text', 'num4', 'num4', 'num4', 'num4',
-      'money', 'money', 'money', 'money', 'money', 'money', 'money', 'money', 'money'],
+    note: 'Данные — факт там, где счёт введён, иначе план. Начислено в тарифах = надбавка μ × Гкал по счётчикам + добавка сглаживания на квартиры без счётчиков и СПЧ. ' +
+      '«Разница нараст.» = начислено с ноября − выставлено в счетах с ноября. «Осталось разнести» = сверхлимит сезона − начислено нарастающим итогом. Сравнение с планом — на вкладке «План-факт».',
+    headers: ['Месяц', 'ЖК', 'Данные', 'Накоплено с ноября, тыс. м³', 'Остаток лимита, тыс. м³',
+      'В счёте поставщика, грн', 'Начислено в тарифах, грн', 'Разница нараст., грн', 'Осталось разнести, грн'],
+    formats: ['text', 'text', 'text', 'num4', 'num4', 'money', 'money', 'money', 'money'],
     rows: rows
   };
 }
