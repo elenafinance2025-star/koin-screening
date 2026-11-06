@@ -28,12 +28,20 @@ check('котельная Лимнос ноябрь план = 11,47 × 0,5 × 2
 var sub = ctx.repWithSubtotals(res.tables[1]);
 var limTot = sub.rows[sub.totalIdx[0]];
 var limRows = res.tables[1].rows.filter(function (r) { return r[1] === 'Лимнос'; });
-var billSum = limRows.reduce(function (s, r) { return s + r[11]; }, 0);
-check('итоги: строка «Итого» под Лимносом, счёт план = сумма месяцев (' + limTot[11].toFixed(2) + ')', limTot[0] === 'Итого' && limTot[1] === 'Лимнос' && Math.abs(limTot[11] - billSum) < 0.01);
-check('итоги: «ЗАПАС план нараст.» = значение марта', limTot[18] === limRows[4][18]);
+var billSum = limRows.reduce(function (s, r) { return s + r[8]; }, 0);
+check('итоги: строка «Итого» под Лимносом, счёт план = сумма месяцев (' + limTot[8].toFixed(2) + ')', limTot[0] === 'Итого' && limTot[1] === 'Лимнос' && Math.abs(limTot[8] - billSum) < 0.01);
+check('итоги: «ЗАПАС план нараст.» = значение марта', limTot[15] === limRows[4][15]);
 check('итоги: 4 итога по ЖК + общий итог', sub.totalIdx.length === 5 && sub.rows[sub.rows.length - 1][0] === 'Итого по всем ЖК');
 var ols = ctx.repWithSubtotals(res.tables[2]);
 check('итоги сверхлимита: «Осталось разнести» по Лимносу = 0 (март)', Math.abs(ols.rows[ols.totalIdx[0]][15]) < 0.01);
+var pf = ctx.repPlanFactTotals(res.tables[3]);
+var pfTot = pf.rows.filter(function (r) { return r[0] === 'Итого' && r[1] === 'Лимнос' && r[2] === 'Начислено газ, грн'; })[0];
+var pfRows = res.tables[3].rows.filter(function (r) { return r[1] === 'Лимнос' && r[2] === 'Начислено газ, грн'; });
+check('план-факт итого: план = сумма 5 месяцев, факт и отклонение — по месяцам с фактом',
+  pfTot && Math.abs(pfTot[4] - pfRows.reduce(function (s, r) { return s + r[4]; }, 0)) < 0.01 &&
+  Math.abs(pfTot[6] - pfRows.filter(function (r) { return r[3] === 'факт'; }).reduce(function (s, r) { return s + r[6]; }, 0)) < 0.01);
+check('план-факт итого: тарифы не суммируются', !pf.rows.some(function (r) { return r[0] === 'Итого' && /грн\/м²|грн\/Гкал/.test(r[2]); }));
+check('начисление: колонок норматива нет', res.tables[1].headers.join('|').indexOf('Норматив') < 0);
 check('кошторис-таблица', ctx.repKoshtTable('Лимнос', kosht['Лимнос']).rows.length === 13);
 console.log(failed ? '\nПРОВАЛЕНО: ' + failed : '\nОтчёты собраны');
 process.exit(failed ? 1 : 0);

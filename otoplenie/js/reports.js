@@ -115,22 +115,20 @@ function repAccrual(planCalc, workCalc, factIdx, koshtPlan, koshtFact) {
     return [w.month, w.zk,
       boilerPlan, isFact ? boilerFact : '', d(boilerFact, boilerPlan),
       engineNum(p.gas), f(w.gas), d(w.gas, engineNum(p.gas)),
-      engineNum(p.norm), f(w.norm), d(w.norm, engineNum(p.norm)),
       engineNum(p.bill), f(w.bill), d(w.bill, engineNum(p.bill)),
       engineNum(p.charged), f(w.charged), d(w.charged, engineNum(p.charged)),
       reservePlan, reservePlanAcc[w.zk], reserveFact, isFact ? reserveAcc[w.zk] : ''];
   });
   return {
     id: 'accrual', title: 'Начисление: содержание котельной и расход газа (план / факт)',
-    note: 'Котельная: тариф кошториса × площадь × доля месяца (ноябрь — 50 %). Газ: объём, норматив, счёт поставщика и начислено по газовым тарифам. Факт показывается только для месяцев с введёнными счетами.',
+    note: 'Котельная: тариф кошториса × площадь × доля месяца (ноябрь — 50 %). Газ: объём, счёт поставщика и начислено по газовым тарифам. Факт показывается только для месяцев с введёнными счетами.',
     headers: ['Месяц', 'ЖК',
       'Котельная план, грн', 'Котельная факт, грн', 'Котельная Δ, грн',
       'Газ план, тыс. м³', 'Газ факт, тыс. м³', 'Газ Δ, тыс. м³',
-      'Норматив план, Гкал', 'Норматив факт, Гкал', 'Норматив Δ, Гкал',
       'Счёт план, грн', 'Счёт факт, грн', 'Счёт Δ, грн',
       'Начислено газ план, грн', 'Начислено газ факт, грн', 'Начислено газ Δ, грн',
       'ЗАПАС план, грн', 'ЗАПАС план нараст., грн', 'ЗАПАС факт, грн', 'ЗАПАС факт нараст., грн'],
-    formats: ['text', 'text', 'money', 'money', 'money', 'num4', 'num4', 'num4', 'num3', 'num3', 'num3',
+    formats: ['text', 'text', 'money', 'money', 'money', 'num4', 'num4', 'num4',
       'money', 'money', 'money', 'money', 'money', 'money', 'money', 'money', 'money', 'money'],
     rows: rows
   };
@@ -295,5 +293,40 @@ function repWithSubtotals(t) {
   Object.keys(t).forEach(function (k) { copy[k] = t[k]; });
   copy.rows = rows;
   copy.totalIdx = totalIdx;
+  return copy;
+}
+
+/**
+ * Итоги план-факта: по каждому ЖК и показателю — сумма за сезон. План — за все месяцы, факт — за месяцы с фактом,
+ * отклонение — факт минус план тех же месяцев. Тарифы и цены (грн/м², грн/Гкал) не суммируются.
+ */
+function repPlanFactTotals(t) {
+  if (!t.rows.length) return t;
+  var groups = [], idx = {};
+  t.rows.forEach(function (r, i) {
+    var f = t.rowFormats ? t.rowFormats[i] : 'money';
+    if (f === 'tariff') return;
+    var key = r[1] + '|' + r[2];
+    if (!idx[key]) { idx[key] = { zk: r[1], item: r[2], fmt: f, n: 0, plan: 0, fact: 0, planFact: 0, nFact: 0 }; groups.push(idx[key]); }
+    var g = idx[key];
+    g.n++;
+    g.plan += engineNum(r[4]);
+    if (r[3] === 'факт') { g.fact += engineNum(r[5]); g.planFact += engineNum(r[4]); g.nFact++; }
+  });
+  var rows = t.rows.slice(), fm = (t.rowFormats || t.rows.map(function () { return 'money'; })).slice(), totalIdx = [];
+  groups.forEach(function (g) {
+    if (g.n < 2) return;
+    totalIdx.push(rows.length);
+    var dev = g.nFact ? g.fact - g.planFact : '';
+    rows.push(['Итого', g.zk, g.item, g.nFact ? 'факт: ' + g.nFact + ' мес.' : 'нет факта', g.plan, g.nFact ? g.fact : '',
+      dev, g.nFact && g.planFact !== 0 ? dev / Math.abs(g.planFact) : '']);
+    fm.push(g.fmt);
+  });
+  var copy = {};
+  Object.keys(t).forEach(function (k) { copy[k] = t[k]; });
+  copy.rows = rows;
+  copy.rowFormats = fm;
+  copy.totalIdx = totalIdx;
+  copy.note = t.note + ' Итого: план — за все месяцы, факт — за месяцы с фактом, отклонение — от плана тех же месяцев; тарифы не суммируются.';
   return copy;
 }

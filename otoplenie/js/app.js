@@ -460,7 +460,7 @@
     var f = app.filters[id] = app.filters[id] || {};
     var spec = filterSpec(t);
     var filtered = applyFilters(t, f);
-    var shown = REP_SUBTOTAL_IDS.indexOf(id) >= 0 ? repWithSubtotals(filtered) : filtered;
+    var shown = REP_SUBTOTAL_IDS.indexOf(id) >= 0 ? repWithSubtotals(filtered) : (id === 'planfact' ? repPlanFactTotals(filtered) : filtered);
     var active = Object.keys(f).filter(function (c) { return f[c]; }).length;
     main.appendChild(h('div', { class: 'bar' }, [
       h('span', { class: 'hint', text: 'Показано строк: ' + filtered.rows.length + ' из ' + t.rows.length +
@@ -513,7 +513,7 @@
     ],
     accrual: [
       ['Котельная', 'Тариф кошториса × площадь × доля месяца (ноябрь 50 %). План — зафиксированный кошторис, факт — последняя загрузка смет.'],
-      ['Газ, норматив, счёт', 'Объём газа (тыс. м³), норматив тепла (Гкал), счёт поставщика: план, факт и отклонение.'],
+      ['Газ, счёт', 'Объём газа (тыс. м³) и счёт поставщика: план, факт и отклонение.'],
       ['Начислено газ', 'Сумма начислений жильцам по газовым тарифам месяца.'],
       ['Δ', 'Факт минус план; показывается только для месяцев с введённым фактом.'],
       ['ЗАПАС', 'Начислено жильцам по газовым тарифам минус счёт поставщика, грн. Плюс — собрано больше счёта (например, заранее собранный сверхлимит), минус — меньше. «нараст.» — с начала сезона; к концу сезона нарастающий запас ≈ 0, если сверхлимит разнесён полностью. Факт — только по месяцам с введённым счётом.']
@@ -605,7 +605,7 @@
 
   // ---------- Приказ и Excel ----------
   function downloadExcel() {
-    var tables = app.calc.tables.map(function (t) { return REP_SUBTOTAL_IDS.indexOf(t.id) >= 0 ? repWithSubtotals(t) : t; }).concat(Object.keys(app.ctx.koshtFact).map(function (zk) { return repKoshtTable(zk, app.ctx.koshtFact[zk]); }));
+    var tables = app.calc.tables.map(function (t) { return REP_SUBTOTAL_IDS.indexOf(t.id) >= 0 ? repWithSubtotals(t) : (t.id === 'planfact' ? repPlanFactTotals(t) : t); }).concat(Object.keys(app.ctx.koshtFact).map(function (zk) { return repKoshtTable(zk, app.ctx.koshtFact[zk]); }));
     var wb = exportWorkbook(tables, window.XLSX);
     var d = new Date();
     var stamp = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
