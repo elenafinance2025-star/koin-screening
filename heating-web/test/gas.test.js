@@ -58,5 +58,26 @@ check('цена сверх лимита 30 000 → мартовский свер
 var hw = res3.planCalc.filter(function (r) { return r.zk === 'Гавайи'; });
 var seedHw = plan.filter(function (r) { return r.zk === 'Гавайи'; });
 check('Гавайи: счета из ввода, без пересчёта', hw.every(function (r, i) { return r.bill === seedHw[i].bill; }));
+// Цена сверх лимита по месяцам (Атлант): ноябрь закрыт по 27 785,36, в декабре цена 30 000
+var T2 = ctx.gasDefaultTariffs();
+var planFixed = ctx.gasResolvePrices(T2); // план зафиксирован при старых ценах
+T2['Атлант'].priceOverByMonth = [27785.36, 30000, '', '', ''];
+var atSeason = ctx.gasSeason(T2['Атлант'], [1.5, 2.5, 3.5, 2.5, 2]);
+check('Атлант: ноябрь по 27 785,36, декабрь по 30 000, январь–март — по последней (30 000)',
+  atSeason[0].priceOver === 27785.36 && atSeason[1].priceOver === 30000 && atSeason[4].priceOver === 30000);
+var atPlan = plan.filter(function (r) { return r.zk === 'Атлант'; });
+var atFact = [JSON.parse(JSON.stringify(atPlan[0]))];
+atFact[0].bill = 41678.04; atFact[0].ol = 41678.04; atFact[0].status = 'закрыт';
+var nov = ctx.engineCompute(plan, ctx.engineDefaultSettings(), {}, {}).filter(function (r) { return r.zk === 'Атлант' && r.month === 'Ноябрь'; })[0];
+var closedAt = { 'Атлант|Ноябрь': { price: nov.price, tNo: nov.tNo, tSpch: nov.tSpch } };
+var journalAt = { 'Атлант': nov.tNo * nov.areaNo + nov.tSpch * nov.areaSpch };
+var r4 = ctx.repBuildAll({ plan: plan, fact: atFact, settings: ctx.engineDefaultSettings(), gasTariffs: T2, gasPlanTariffs: planFixed,
+  journal: journalAt, closed: closedAt, koshtPlan: {}, koshtFact: {} });
+var wAt = r4.workCalc.filter(function (r) { return r.zk === 'Атлант'; });
+check('ноябрь (закрыт) — тарифы не изменились после новой цены декабря', wAt[0].price === nov.price && wAt[0].tNo === nov.tNo);
+check('ноябрь — проверка счёта по цене ноября, ложного предупреждения нет', !wAt[0].warn);
+check('декабрь (прогноз) считается по 30 000: 2,5 × 30 000 = 75 000 (' + wAt[1].bill + ')', near(wAt[1].bill, 75000));
+var pAt = r4.planCalc.filter(function (r) { return r.zk === 'Атлант'; });
+check('план по ценам, зафиксированным с планом: декабрь 2,5 × 27 785,36 (' + pAt[1].bill + ')', near(pAt[1].bill, 2.5 * 27785.36));
 console.log(failed ? '\nПРОВАЛЕНО: ' + failed : '\nГаз по лимиту считается верно');
 process.exit(failed ? 1 : 0);

@@ -17,9 +17,32 @@ function gasDefaultTariffs() {
   };
 }
 
+/**
+ * Цена сверх лимита месяца i: фактическая цена этого месяца (priceOverByMonth), если введена;
+ * иначе последняя введённая цена предыдущих месяцев (прогноз по свежей цене); иначе базовая priceOver.
+ */
+function gasPriceOver(t, i) {
+  var by = t.priceOverByMonth || [];
+  for (var j = i; j >= 0; j--) {
+    if (engineNum(by[j]) > 0) return engineNum(by[j]);
+  }
+  return engineNum(t.priceOver);
+}
+
+/** Копия тарифов с ценой сверх лимита, проставленной в каждый месяц (для фиксации плана). */
+function gasResolvePrices(tariffs) {
+  var out = {};
+  Object.keys(tariffs || {}).forEach(function (zk) {
+    var t = JSON.parse(JSON.stringify(tariffs[zk]));
+    t.priceOverByMonth = ENGINE_MONTHS.map(function (m, i) { return gasPriceOver(tariffs[zk], i); });
+    out[zk] = t;
+  });
+  return out;
+}
+
 /** Тарифы применимы к ЖК: газовая котельная с заданной ценой. */
 function gasApplies(t) {
-  return !!t && t.mode !== 'heat' && engineNum(t.priceOver) > 0;
+  return !!t && t.mode !== 'heat' && (engineNum(t.priceOver) > 0 || (t.priceOverByMonth || []).some(function (x) { return engineNum(x) > 0; }));
 }
 
 function gasExtras(t, month) {
@@ -31,9 +54,10 @@ function gasExtras(t, month) {
  * Возвращает по месяцам { cumBefore, cum, inLimit, over, limitLeft, bill, ol }.
  */
 function gasSeason(t, volumes) {
-  var limit = engineNum(t.limit), pl = engineNum(t.priceLimit), po = engineNum(t.priceOver);
+  var limit = engineNum(t.limit), pl = engineNum(t.priceLimit);
   var cum = 0;
   return ENGINE_MONTHS.map(function (m, i) {
+    var po = gasPriceOver(t, i);
     var v = Math.max(0, engineNum(volumes[i]));
     var inLimit = Math.max(0, Math.min(v, limit - cum));
     var over = v - inLimit;
@@ -41,7 +65,7 @@ function gasSeason(t, volumes) {
     cum += v;
     var extra = gasExtras(t, m);
     return {
-      month: m, volume: v, cumBefore: before, cum: cum, inLimit: inLimit, over: over,
+      month: m, volume: v, cumBefore: before, cum: cum, inLimit: inLimit, over: over, priceOver: po,
       limitLeft: Math.max(0, limit - cum), extra: extra,
       bill: engineRound(inLimit * pl + over * po + extra, 2),
       ol: engineRound(over * po + extra, 2)
@@ -104,7 +128,7 @@ function gasApplyWork(workRows, tariffs) {
         if (Math.abs(bill - s.bill) > tolBill || Math.abs(ol - s.ol) > Math.max(100, 0.01 * s.ol)) {
           r.warn = 'счёт по объёму и ценам: ' + engineFmt(s.bill, 2) + ' грн, в т.ч. сверхлимит ' + engineFmt(s.ol, 2) +
             ' (льгота ' + engineFmt(s.inLimit, 4) + ' × ' + engineFmt(t.priceLimit, 2) + ' + сверх ' + engineFmt(s.over, 4) +
-            ' × ' + engineFmt(t.priceOver, 2) + (s.extra ? ' + прочие ' + engineFmt(s.extra, 2) : '') +
+            ' × ' + engineFmt(s.priceOver, 2) + (s.extra ? ' + прочие ' + engineFmt(s.extra, 2) : '') +
             ') — введено ' + engineFmt(bill, 2) + ' / ' + engineFmt(ol, 2) + '; проверьте счёт или цены';
         }
       } else {

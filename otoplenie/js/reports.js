@@ -49,7 +49,8 @@ function repBuildAll(ctx) {
   var S = ctx.settings;
   // Газ по сезонному лимиту (gas.js): план — счёт и сверхлимит из объёма; рабочие — прогноз от факта
   var useGas = ctx.gasTariffs && typeof gasApplyPlan === 'function';
-  var plan = useGas ? gasApplyPlan(ctx.plan, ctx.gasTariffs) : ctx.plan;
+  // план считается по ценам, зафиксированным вместе с планом (если фиксировали), рабочие — по текущим
+  var plan = useGas ? gasApplyPlan(ctx.plan, ctx.gasPlanTariffs || ctx.gasTariffs) : ctx.plan;
   var planCalc = repSortRows(engineCompute(plan, S, {}, {}));
   var work = repMerge(plan, ctx.fact);
   if (useGas) work = gasApplyWork(work, ctx.gasTariffs);

@@ -105,7 +105,9 @@
       requisites: store('requisites', seedRequisites()), sourceFileId: store('sourceFileId', DEFAULT_SOURCE_FILE_ID),
       journal: journal, closed: closed, koshtFact: koshtFact, koshtPlan: snap ? snap.kosht : koshtFact,
       planFixedAt: snap ? snap.fixedAt : '',
-      gasTariffs: store('gasTariffs', gasDefaultTariffs())
+      gasTariffs: store('gasTariffs', gasDefaultTariffs()),
+      gasPlanTariffs: snap && snap.gasTariffs ? snap.gasTariffs : null,
+      gasPlanFixedAt: snap && snap.gasTariffs ? snap.fixedAt : ''
     };
   }
 
@@ -224,7 +226,8 @@
         'План — данные, по которым утверждается приказ.' })
     ]);
     main.appendChild(bar);
-    var gt = app.ctx.gasTariffs[app.zk];
+    // план — по ценам, зафиксированным с планом; факт — по текущим ценам месяцев
+    var gt = (app.dataset === 'plan' && app.ctx.gasPlanTariffs ? app.ctx.gasPlanTariffs : app.ctx.gasTariffs)[app.zk];
     var gasOn = gasApplies(gt);
     var autoPlan = gasOn && app.dataset === 'plan'; // в плане счёт и сверхлимит считаются из объёма
     var thead = h('tr', {}, [h('th', { text: 'Месяц' })].concat(INPUT_COLS.map(function (c) {
@@ -297,7 +300,8 @@
         season.forEach(function (sn, i) { if (endIdx < 0 && sn.over > 0) endIdx = i; });
         var last = season[season.length - 1];
         limitInfo.textContent = 'Лимит ' + fmt(engineNum(gt.limit), 'num4') + ' тыс. м³ по ' + fmt(engineNum(gt.priceLimit), 'money') +
-          ' грн, сверх — ' + fmt(engineNum(gt.priceOver), 'money') + ' грн/тыс. м³. ' +
+          ' грн, сверх — ' + season.map(function (sn) { return fmt(sn.priceOver, 'money'); }).filter(function (x, i, a) { return a.indexOf(x) === i; }).join(' / ') + ' грн/тыс. м³' +
+          (app.dataset === 'plan' && app.ctx.gasPlanTariffs ? ' (цены зафиксированы с планом ' + new Date(app.ctx.gasPlanFixedAt).toLocaleDateString('uk-UA') + ')' : '') + '. ' +
           (engineNum(gt.limit) <= 0 ? 'Лимита нет: весь газ по коммерческой цене.' :
             endIdx >= 0 ? 'Лимит заканчивается в месяце: ' + ENGINE_MONTHS[endIdx].toLowerCase() + ', сверх лимита за сезон ' + fmt(last.cum - engineNum(gt.limit), 'num4') + ' тыс. м³.' :
               'Лимит не превышен, остаток ' + fmt(last.limitLeft, 'num4') + ' тыс. м³.') +
@@ -592,7 +596,8 @@
       });
       p = api('saveRows', { dataset: 'plan', rows: merged }).then(function () { app.data.plan = merged; });
     }
-    var snap = { fixedAt: new Date().toISOString(), kosht: app.ctx.koshtFact };
+    // вместе с планом фиксируются цены газа по месяцам — план-факт не «плывёт» от новых цен
+    var snap = { fixedAt: new Date().toISOString(), kosht: app.ctx.koshtFact, gasTariffs: gasResolvePrices(app.ctx.gasTariffs) };
     run('Фиксирую план…', p.then(function () { return api('saveStore', { key: 'koshtPlan', value: snap }); })).then(function () {
       app.data.store.koshtPlan = snap; recompute(); render(); toast('План зафиксирован');
     });
@@ -694,10 +699,16 @@
       var modeSel = h('select', { onchange: function () { t.mode = modeSel.value; } }, [['gas', 'газ (котельная): счёт из объёма'], ['heat', 'покупное тепло / ввод счёта вручную']]
         .map(function (o) { return h('option', { value: o[0], text: o[1], selected: t.mode === o[0] ? 'selected' : null }); }));
       f.appendChild(h('label', { text: 'Режим' })); f.appendChild(modeSel);
-      [['limit', 'Лимит на сезон, тыс. м³ (0 — лимита нет)'], ['priceLimit', 'Цена в пределах лимита, грн/тыс. м³'], ['priceOver', 'Цена сверх лимита, грн/тыс. м³']].forEach(function (x) {
+      [['limit', 'Лимит на сезон, тыс. м³ (0 — лимита нет)'], ['priceLimit', 'Цена в пределах лимита, грн/тыс. м³'], ['priceOver', 'Цена сверх лимита — плановая / прогноз, грн/тыс. м³']].forEach(function (x) {
         f.appendChild(h('label', { text: x[1] }));
         f.appendChild(h('input', { value: String(t[x[0]]).replace('.', ','), onchange: function (e) { t[x[0]] = engineNum(e.target.value); } }));
       });
+      t.priceOverByMonth = t.priceOverByMonth || ['', '', '', '', ''];
+      f.appendChild(h('label', { text: 'Цена сверх лимита по месяцам (из счетов), грн/тыс. м³' }));
+      f.appendChild(h('div', { class: 'months5' }, ENGINE_MONTHS.map(function (m, i) {
+        return h('label', { class: 'mini' }, [h('span', { text: m }), h('input', { value: t.priceOverByMonth[i] ? String(t.priceOverByMonth[i]).replace('.', ',') : '',
+          placeholder: '—', inputmode: 'decimal', onchange: function (e) { var v = e.target.value.trim(); t.priceOverByMonth[i] = v === '' ? '' : engineNum(v); } })]);
+      })));
       t.extras.forEach(function (ex, i) {
         var ms = h('select', { onchange: function () { ex.month = ms.value; } }, ENGINE_MONTHS.map(function (m) { return h('option', { value: m, text: m, selected: ex.month === m ? 'selected' : null }); }));
         f.appendChild(h('label', { text: 'Прочая сумма к сверхлимиту ' + (i + 1) + ' (месяц / грн / что это)' }));
@@ -709,6 +720,7 @@
       gbox.appendChild(f);
     });
     main.appendChild(h('section', { class: 'card' }, [h('h3', { text: 'Газ и лимиты' }),
+      h('p', { class: 'hint', text: 'Цена сверх лимита по месяцам: вписывайте цену из счёта каждого месяца — прошлые месяцы не меняются. Пустой месяц берёт последнюю введённую цену (или плановую). План считается по ценам, зафиксированным кнопкой «Зафиксировать план» (вкладка «Приказ и Excel»).' }),
       h('p', { class: 'hint', text: 'Лимит — на весь сезон. Пока накопленный с ноября объём не превысил лимит, газ по льготной цене; в месяце перехода — частично; дальше — по цене сверх лимита. План: счёт и сверхлимит считаются из объёма. Факт: вводится из счёта, рядом показывается расчёт для проверки. Месяцы без факта — прогноз от фактического накопленного объёма. Смена цены сверх лимита сразу пересчитывает прогноз.' }),
       gbox,
       h('button', { class: 'primary', text: 'Сохранить газ и лимиты', onclick: function () {
