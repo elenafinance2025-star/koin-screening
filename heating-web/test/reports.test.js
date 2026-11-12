@@ -68,6 +68,10 @@ check('результат: план 100 000 + 120 000 ÷ 1,2 = 200 000; факт
 check('результат: итого = газ + котельная', (function (rows) {
   var t = rget(rows, 'Результат итого'); return Math.abs(t[4] - rget(rows, 'Результат: газ')[4] - rget(rows, 'Результат: котельная')[4]) < 0.01;
 })(res2.tables[5].rows.filter(function (r) { return r[0] === 'Лимнос'; })));
+var res3 = ctx.repBuildAll({ plan: fx.rows, fact: fact, settings: ctx.engineDefaultSettings(), koshtPlan: kosht, koshtFact: kosht,
+  boilerCosts: { 'Лимнос': { planCost: 1394602.8, factCost: 918950 } } });
+var c3 = rget(res3.tables[5].rows.filter(function (r) { return r[0] === 'Лимнос'; }), 'Расход: котельная (без НДС)');
+check('результат: одно поле с НДС — план 1 394 602,80 ÷ 1,2, факт 918 950 ÷ 1,2', Math.abs(c3[2] - 1162169) < 0.01 && Math.abs(c3[4] - 765791.67) < 0.01 && c3[6] === 'факт за сезон');
 var marks = ctx.repResultMarks(rt);
 check('результат: строки «Результат…» выделены', marks.totalIdx.length === 3 * 5);
 check('кошторис-таблица', ctx.repKoshtTable('Лимнос', kosht['Лимнос']).rows.length === 13);

@@ -503,17 +503,17 @@
     }
   }
 
-  // Расход котельной за сезон по ЖК: план и факт (административные — без НДС, эксплуатационные — с НДС)
-  var COST_FIELDS = [['planAdmin', 'План: административные, без НДС'], ['planOper', 'План: эксплуатационные, с НДС'],
-    ['factAdmin', 'Факт: административные, без НДС'], ['factOper', 'Факт: эксплуатационные, с НДС']];
+  // Расход котельной за сезон по ЖК: план и факт, одной суммой с НДС
+  var COST_FIELDS = [['planCost', 'План: расход котельной за сезон, с НДС'], ['factCost', 'Факт: расход котельной за сезон, с НДС']];
   function boilerCostsCard() {
     var costs = app.ctx.boilerCosts || {};
     var thead = h('tr', {}, [h('th', { text: 'ЖК' })].concat(COST_FIELDS.map(function (f) { return h('th', { text: f[1] + ', грн' }); })));
     var tbody = h('tbody');
     ZK_ORDER.forEach(function (zk) {
-      var c = costs[zk] || {}, k = app.ctx.koshtPlan && app.ctx.koshtPlan[zk];
-      var def = { planAdmin: k ? k.articles.filter(function (a) { return a.key === 'admin'; })[0].season : '',
-        planOper: k ? k.articles.filter(function (a) { return a.key === 'oper'; })[0].season * REP_VAT : '' };
+      var c = Object.assign({}, costs[zk] || {}), k = app.ctx.koshtPlan && app.ctx.koshtPlan[zk];
+      var def = { planCost: k ? k.season.gross : '' };
+      if (!repSet(c.planCost) && (repSet(c.planAdmin) || repSet(c.planOper))) c = { planCost: engineNum(c.planAdmin) * REP_VAT + engineNum(c.planOper), factCost: c.factCost };
+      if (!repSet(c.factCost) && (repSet(c.factAdmin) || repSet(c.factOper))) c.factCost = engineNum(c.factAdmin) * REP_VAT + engineNum(c.factOper);
       tbody.appendChild(h('tr', { 'data-zk': zk }, [h('td', { text: zk })].concat(COST_FIELDS.map(function (f) {
         var v = c[f[0]];
         return h('td', {}, [h('input', { 'data-f': f[0], inputmode: 'decimal', 'aria-label': zk + ': ' + f[1],
@@ -523,8 +523,8 @@
     });
     return h('section', { class: 'card' }, [
       h('h3', { text: 'Расход котельной за сезон' }),
-      h('p', { class: 'hint', text: 'Административные — без НДС, эксплуатационные — с НДС (как в смете), программа делит их на 1,2. ' +
-        'Пустой план = кошторис (серая подсказка в поле). Факт вносится в конце сезона; пока его нет, в прогнозе стоит план.' }),
+      h('p', { class: 'hint', text: 'Одна сумма за сезон с НДС, как в счетах; для результата программа делит её на 1,2. ' +
+        'Пустой план = кошторис с НДС (серая подсказка в поле). Факт вносится в конце сезона; пока его нет, в прогнозе стоит план.' }),
       h('div', { class: 'scroll' }, [h('table', { class: 'grid' }, [h('thead', {}, [thead]), tbody])]),
       h('div', { class: 'bar' }, [h('button', { class: 'primary', text: 'Сохранить расход котельной', onclick: function () {
         var out = {};
@@ -554,7 +554,7 @@
     result: [
       ['Результат', 'Начислено жильцам минус расход: плюс — доход, минус — убыток (выделен красным).'],
       ['Газ', 'Начислено по газовым тарифам и счета поставщика, с НДС. По плану результат ≈ 0; в течение сезона колеблется из-за заранее собираемого сверхлимита, к концу сезона должен прийти к нулю.'],
-      ['Котельная', 'Без НДС. Начислено = тариф кошториса × площадь × доля месяца ÷ 1,2. Расход = административные + эксплуатационные ÷ 1,2 (вносятся над таблицей).'],
+      ['Котельная', 'Без НДС. Начислено = тариф кошториса × площадь × доля месяца ÷ 1,2. Расход = сумма с НДС, внесённая над таблицей, ÷ 1,2.'],
       ['Факт на сегодня', 'Только месяцы с введённым счётом. Расход котельной ведётся за сезон, поэтому здесь не показывается.'],
       ['Прогноз на конец сезона', 'Факт там, где он есть, остальное — по плану (с учётом фактического газа). Главная цифра: не уходим ли в минус.'],
       ['Источник', 'Откуда взяты цифры прогноза: сколько месяцев по факту; расход котельной — факт, введённый план или кошторис.']
