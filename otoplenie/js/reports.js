@@ -84,11 +84,11 @@ var REP_VAT = 1.2;
 function repSet(v) { return v !== '' && v !== undefined && v !== null; }
 
 function repResultCostPlan(kosht, c) {
-  if (c && repSet(c.planCost)) return { value: engineNum(c.planCost) / REP_VAT, src: 'план введён' };
+  if (c && repSet(c.planCost)) return { value: engineNum(c.planCost), src: 'план введён' };
   var hasPlan = c && (c.planAdmin !== '' && c.planAdmin !== undefined && c.planAdmin !== null ||
     c.planOper !== '' && c.planOper !== undefined && c.planOper !== null);
-  if (hasPlan) return { value: engineNum(c.planAdmin) + engineNum(c.planOper) / REP_VAT, src: 'план введён' };
-  return { value: kosht ? kosht.season.net : 0, src: kosht ? 'план = кошторис' : 'нет кошториса' };
+  if (hasPlan) return { value: engineNum(c.planAdmin) * REP_VAT + engineNum(c.planOper), src: 'план введён' };
+  return { value: kosht ? kosht.season.gross : 0, src: kosht ? 'план = кошторис' : 'нет кошториса' };
 }
 
 function repResult(planCalc, workCalc, factIdx, koshtPlan, koshtFact, costs) {
@@ -102,10 +102,13 @@ function repResult(planCalc, workCalc, factIdx, koshtPlan, koshtFact, costs) {
     push(zk, 'Начислено жильцам: газ (с НДС)', v.accGasP, v.accGasD, v.accGasF, srcGas);
     push(zk, 'Расход: газ — счета поставщика (с НДС)', v.billP, v.billD, v.billF, srcGas);
     push(zk, 'Результат: газ', v.accGasP - v.billP, v.billD === '' ? '' : v.accGasD - v.billD, v.accGasF - v.billF, '');
-    push(zk, 'Начислено жильцам: котельная (без НДС)', v.accBP, v.accBD, v.accBF, 'тариф кошториса × площадь ÷ 1,2');
-    push(zk, 'Расход: котельная (без НДС)', v.costP, '', v.costF, srcCost);
+    push(zk, 'Начислено жильцам: котельная (с НДС)', v.accBP, v.accBD, v.accBF, 'тариф кошториса × площадь');
+    push(zk, 'Расход: котельная (с НДС)', v.costP, '', v.costF, srcCost);
     push(zk, 'Результат: котельная', v.accBP - v.costP, '', v.accBF - v.costF, '');
-    push(zk, 'Результат итого', v.accGasP - v.billP + v.accBP - v.costP, '', v.accGasF - v.billF + v.accBF - v.costF, '');
+    push(zk, 'Результат: котельная без НДС', (v.accBP - v.costP) / REP_VAT, '', (v.accBF - v.costF) / REP_VAT, 'реальный заработок: результат ÷ 1,2');
+    var totP = v.accGasP - v.billP + v.accBP - v.costP, totF = v.accGasF - v.billF + v.accBF - v.costF;
+    push(zk, 'Результат итого', totP, '', totF, '');
+    push(zk, 'Результат итого без НДС', totP / REP_VAT, '', totF / REP_VAT, 'реальный заработок: результат ÷ 1,2');
   };
   ZK_ORDER.forEach(function (zk) {
     var w = workCalc.filter(function (r) { return r.zk === zk; });
@@ -113,11 +116,11 @@ function repResult(planCalc, workCalc, factIdx, koshtPlan, koshtFact, costs) {
     var p = planCalc.filter(function (r) { return r.zk === zk; });
     var isF = function (r) { return repHasFact(factIdx[repKey(r)]); };
     var wf = w.filter(isF);
-    var boiler = function (kosht, r) { return repKoshtTariff(kosht, zk) * koshtMonthShare(r.monthIdx, repKoshtMonths(kosht, zk)) * repKoshtArea(kosht, zk) / REP_VAT; };
+    var boiler = function (kosht, r) { return repKoshtTariff(kosht, zk) * koshtMonthShare(r.monthIdx, repKoshtMonths(kosht, zk)) * repKoshtArea(kosht, zk); };
     var c = costs[zk] || {};
     var cp = repResultCostPlan(koshtPlan && koshtPlan[zk], c);
     var hasFact = repSet(c.factCost) || repSet(c.factAdmin) || repSet(c.factOper);
-    var factCost = repSet(c.factCost) ? engineNum(c.factCost) / REP_VAT : engineNum(c.factAdmin) + engineNum(c.factOper) / REP_VAT;
+    var factCost = repSet(c.factCost) ? engineNum(c.factCost) : engineNum(c.factAdmin) * REP_VAT + engineNum(c.factOper);
     var v = {
       accGasP: sum(p, function (r) { return r.charged; }), accGasD: sum(wf, function (r) { return r.charged; }),
       accGasF: sum(w, function (r) { return r.charged; }),
@@ -136,7 +139,7 @@ function repResult(planCalc, workCalc, factIdx, koshtPlan, koshtFact, costs) {
   return {
     id: 'result', title: 'Результат сезона: начислено − расход',
     note: 'Плюс — доход, минус — убыток. Газ — с НДС (в начислении и в счетах поставщика он одинаков и сокращается). ' +
-      'Котельная — без НДС: начислено ÷ 1,2; расход котельной вносится с НДС и тоже делится на 1,2. ' +
+      'Котельная — тоже с НДС: начислено по тарифу кошториса, расход — сумма с НДС, внесённая над таблицей. Строки «без НДС» — результат ÷ 1,2: реальный заработок, НДС уходит в бюджет. ' +
       '«Факт на сегодня» — только месяцы с введённым счётом. «Прогноз на конец сезона» — факт там, где он есть, остальное по плану. Расход котельной — за сезон: до ввода факта берётся план.',
     headers: ['ЖК', 'Статья', 'План на сезон, грн', 'Факт на сегодня, грн', 'Прогноз на конец сезона, грн', 'Прогноз − план, грн', 'Источник'],
     formats: ['text', 'text', 'money', 'money', 'money', 'money', 'text'],

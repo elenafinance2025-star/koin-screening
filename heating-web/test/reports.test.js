@@ -54,26 +54,29 @@ check('начисление: колонок норматива нет', res.tabl
 var rt = res.tables[5];
 var rLim = rt.rows.filter(function (r) { return r[0] === 'Лимнос'; });
 var rget = function (rows, item) { return rows.filter(function (r) { return r[1] === item; })[0]; };
-check('результат: 7 строк на ЖК + блок «Все ЖК»', rt.id === 'result' && rt.rows.length === 7 * 5 && rt.rows[rt.rows.length - 1][0] === 'Все ЖК');
-var bAcc = rget(rLim, 'Начислено жильцам: котельная (без НДС)'), bCost = rget(rLim, 'Расход: котельная (без НДС)');
-check('результат: котельная по плану без НДС ≈ кошторис (' + bAcc[2].toFixed(2) + ' / ' + bCost[2].toFixed(2) + ')',
-  Math.abs(bAcc[2] - kosht['Лимнос'].season.net) < 0.01 * 4.5 * kosht['Лимнос'].area && bCost[6].indexOf('кошторис') >= 0);
+check('результат: 9 строк на ЖК + блок «Все ЖК»', rt.id === 'result' && rt.rows.length === 9 * 5 && rt.rows[rt.rows.length - 1][0] === 'Все ЖК');
+var bAcc = rget(rLim, 'Начислено жильцам: котельная (с НДС)'), bCost = rget(rLim, 'Расход: котельная (с НДС)');
+check('результат: котельная по плану с НДС ≈ кошторис (' + bAcc[2].toFixed(2) + ' / ' + bCost[2].toFixed(2) + ')',
+  Math.abs(bAcc[2] - kosht['Лимнос'].season.gross) < 0.005 * 4.5 * kosht['Лимнос'].area && bCost[6].indexOf('кошторис') >= 0);
 var gRes = rget(rLim, 'Результат: газ');
 check('результат: газ по плану ≈ 0 (' + gRes[2].toFixed(2) + ')', Math.abs(gRes[2]) < 100);
 check('результат: факт на сегодня — только 2 месяца с фактом', Math.abs(rget(rLim, 'Расход: газ — счета поставщика (с НДС)')[3] - (fact[0].bill + fact[1].bill)) < 0.01);
 var res2 = ctx.repBuildAll({ plan: fx.rows, fact: fact, settings: ctx.engineDefaultSettings(), koshtPlan: kosht, koshtFact: kosht,
   boilerCosts: { 'Лимнос': { planAdmin: 100000, planOper: 120000, factAdmin: 90000, factOper: '' } } });
-var c2 = rget(res2.tables[5].rows.filter(function (r) { return r[0] === 'Лимнос'; }), 'Расход: котельная (без НДС)');
-check('результат: план 100 000 + 120 000 ÷ 1,2 = 200 000; факт 90 000 (экспл. пусто = 0)', Math.abs(c2[2] - 200000) < 0.01 && Math.abs(c2[4] - 90000) < 0.01 && c2[6] === 'факт за сезон');
+var c2 = rget(res2.tables[5].rows.filter(function (r) { return r[0] === 'Лимнос'; }), 'Расход: котельная (с НДС)');
+check('результат: прежний формат — план 100 000 × 1,2 + 120 000 = 240 000; факт 90 000 × 1,2', Math.abs(c2[2] - 240000) < 0.01 && Math.abs(c2[4] - 108000) < 0.01 && c2[6] === 'факт за сезон');
 check('результат: итого = газ + котельная', (function (rows) {
   var t = rget(rows, 'Результат итого'); return Math.abs(t[4] - rget(rows, 'Результат: газ')[4] - rget(rows, 'Результат: котельная')[4]) < 0.01;
 })(res2.tables[5].rows.filter(function (r) { return r[0] === 'Лимнос'; })));
 var res3 = ctx.repBuildAll({ plan: fx.rows, fact: fact, settings: ctx.engineDefaultSettings(), koshtPlan: kosht, koshtFact: kosht,
   boilerCosts: { 'Лимнос': { planCost: 1394602.8, factCost: 918950 } } });
-var c3 = rget(res3.tables[5].rows.filter(function (r) { return r[0] === 'Лимнос'; }), 'Расход: котельная (без НДС)');
-check('результат: одно поле с НДС — план 1 394 602,80 ÷ 1,2, факт 918 950 ÷ 1,2', Math.abs(c3[2] - 1162169) < 0.01 && Math.abs(c3[4] - 765791.67) < 0.01 && c3[6] === 'факт за сезон');
+var r3 = res3.tables[5].rows.filter(function (r) { return r[0] === 'Лимнос'; });
+var c3 = rget(r3, 'Расход: котельная (с НДС)');
+check('результат: одно поле с НДС — план 1 394 602,80, факт 918 950 как есть', Math.abs(c3[2] - 1394602.8) < 0.01 && Math.abs(c3[4] - 918950) < 0.01 && c3[6] === 'факт за сезон');
+check('результат: «без НДС» = результат ÷ 1,2', Math.abs(rget(r3, 'Результат: котельная без НДС')[4] - rget(r3, 'Результат: котельная')[4] / 1.2) < 0.01 &&
+  Math.abs(rget(r3, 'Результат итого без НДС')[4] - rget(r3, 'Результат итого')[4] / 1.2) < 0.01);
 var marks = ctx.repResultMarks(rt);
-check('результат: строки «Результат…» выделены', marks.totalIdx.length === 3 * 5);
+check('результат: строки «Результат…» выделены', marks.totalIdx.length === 5 * 5);
 check('кошторис-таблица', ctx.repKoshtTable('Лимнос', kosht['Лимнос']).rows.length === 13);
 console.log(failed ? '\nПРОВАЛЕНО: ' + failed : '\nОтчёты собраны');
 process.exit(failed ? 1 : 0);
