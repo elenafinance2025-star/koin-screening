@@ -51,6 +51,25 @@ check('план-факт итого: итоги Лимноса стоят под
   pf.rows.slice(pfFirstAtlant).every(function (r) { return r[1] !== 'Лимнос'; }) &&
   pf.rows[pfFirstAtlant - 1][0] === 'Итого');
 check('начисление: колонок норматива нет', res.tables[1].headers.join('|').indexOf('Норматив') < 0);
+var rt = res.tables[5];
+var rLim = rt.rows.filter(function (r) { return r[0] === 'Лимнос'; });
+var rget = function (rows, item) { return rows.filter(function (r) { return r[1] === item; })[0]; };
+check('результат: 7 строк на ЖК + блок «Все ЖК»', rt.id === 'result' && rt.rows.length === 7 * 5 && rt.rows[rt.rows.length - 1][0] === 'Все ЖК');
+var bAcc = rget(rLim, 'Начислено жильцам: котельная (без НДС)'), bCost = rget(rLim, 'Расход: котельная (без НДС)');
+check('результат: котельная по плану без НДС ≈ кошторис (' + bAcc[2].toFixed(2) + ' / ' + bCost[2].toFixed(2) + ')',
+  Math.abs(bAcc[2] - kosht['Лимнос'].season.net) < 0.01 * 4.5 * kosht['Лимнос'].area && bCost[6].indexOf('кошторис') >= 0);
+var gRes = rget(rLim, 'Результат: газ');
+check('результат: газ по плану ≈ 0 (' + gRes[2].toFixed(2) + ')', Math.abs(gRes[2]) < 100);
+check('результат: факт на сегодня — только 2 месяца с фактом', Math.abs(rget(rLim, 'Расход: газ — счета поставщика (с НДС)')[3] - (fact[0].bill + fact[1].bill)) < 0.01);
+var res2 = ctx.repBuildAll({ plan: fx.rows, fact: fact, settings: ctx.engineDefaultSettings(), koshtPlan: kosht, koshtFact: kosht,
+  boilerCosts: { 'Лимнос': { planAdmin: 100000, planOper: 120000, factAdmin: 90000, factOper: '' } } });
+var c2 = rget(res2.tables[5].rows.filter(function (r) { return r[0] === 'Лимнос'; }), 'Расход: котельная (без НДС)');
+check('результат: план 100 000 + 120 000 ÷ 1,2 = 200 000; факт 90 000 (экспл. пусто = 0)', Math.abs(c2[2] - 200000) < 0.01 && Math.abs(c2[4] - 90000) < 0.01 && c2[6] === 'факт за сезон');
+check('результат: итого = газ + котельная', (function (rows) {
+  var t = rget(rows, 'Результат итого'); return Math.abs(t[4] - rget(rows, 'Результат: газ')[4] - rget(rows, 'Результат: котельная')[4]) < 0.01;
+})(res2.tables[5].rows.filter(function (r) { return r[0] === 'Лимнос'; })));
+var marks = ctx.repResultMarks(rt);
+check('результат: строки «Результат…» выделены', marks.totalIdx.length === 3 * 5);
 check('кошторис-таблица', ctx.repKoshtTable('Лимнос', kosht['Лимнос']).rows.length === 13);
 console.log(failed ? '\nПРОВАЛЕНО: ' + failed : '\nОтчёты собраны');
 process.exit(failed ? 1 : 0);

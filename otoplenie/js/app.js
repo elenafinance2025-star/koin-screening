@@ -105,6 +105,7 @@
       requisites: store('requisites', seedRequisites()), sourceFileId: store('sourceFileId', DEFAULT_SOURCE_FILE_ID),
       journal: journal, closed: closed, koshtFact: koshtFact, koshtPlan: snap ? snap.kosht : koshtFact,
       planFixedAt: snap ? snap.fixedAt : '',
+      boilerCosts: store('boilerCosts', {}),
       gasTariffs: store('gasTariffs', gasDefaultTariffs()),
       gasPlanTariffs: snap && snap.gasTariffs ? snap.gasTariffs : null,
       gasPlanFixedAt: snap && snap.gasTariffs ? snap.fixedAt : ''
@@ -183,7 +184,7 @@
   // ---------- Вкладки ----------
   var TABS = [
     ['input', 'Ввод'], ['tariffs', 'Тарифы'], ['accrual', 'Начисление'], ['overlimit', 'Сверхлимит'],
-    ['planfact', 'План-факт'], ['details', 'Детали'], ['kosht', 'Кошторис'], ['docs', 'Приказ и Excel'], ['settings', 'Настройки']
+    ['result', 'Результат'], ['planfact', 'План-факт'], ['details', 'Детали'], ['kosht', 'Кошторис'], ['docs', 'Приказ и Excel'], ['settings', 'Настройки']
   ];
 
   function render() {
@@ -408,7 +409,7 @@
       var tr = h('tr', { class: totals.indexOf(i) >= 0 ? 'subtotal' : null });
       r.forEach(function (v, c) {
         var f = t.formats[c] === 'x' && t.rowFormats ? t.rowFormats[i] : t.formats[c];
-        var cls = typeof v === 'number' ? 'n' : '';
+        var cls = typeof v === 'number' ? (t.id === 'result' && totals.indexOf(i) >= 0 && v < -0.005 ? 'n neg' : 'n') : '';
         if (typeof v === 'string' && v.indexOf('ОШИБКА') === 0) cls = 'err';
         else if (typeof v === 'string' && v.indexOf('проверьте') >= 0) cls = 'warn';
         else if (typeof v === 'string' && v.indexOf('✓') === 0) cls = 'ok';
@@ -460,7 +461,9 @@
     var f = app.filters[id] = app.filters[id] || {};
     var spec = filterSpec(t);
     var filtered = applyFilters(t, f);
-    var shown = REP_SUBTOTAL_IDS.indexOf(id) >= 0 ? repWithSubtotals(filtered) : (id === 'planfact' ? repPlanFactTotals(filtered) : filtered);
+    var shown = REP_SUBTOTAL_IDS.indexOf(id) >= 0 ? repWithSubtotals(filtered) : (id === 'planfact' ? repPlanFactTotals(filtered) :
+      (id === 'result' ? repResultMarks(filtered) : filtered));
+    if (id === 'result') main.appendChild(boilerCostsCard());
     var active = Object.keys(f).filter(function (c) { return f[c]; }).length;
     main.appendChild(h('div', { class: 'bar' }, [
       h('span', { class: 'hint', text: 'Показано строк: ' + filtered.rows.length + ' из ' + t.rows.length +
@@ -493,6 +496,44 @@
     }
   }
 
+  // Расход котельной за сезон по ЖК: план и факт (административные — без НДС, эксплуатационные — с НДС)
+  var COST_FIELDS = [['planAdmin', 'План: административные, без НДС'], ['planOper', 'План: эксплуатационные, с НДС'],
+    ['factAdmin', 'Факт: административные, без НДС'], ['factOper', 'Факт: эксплуатационные, с НДС']];
+  function boilerCostsCard() {
+    var costs = app.ctx.boilerCosts || {};
+    var thead = h('tr', {}, [h('th', { text: 'ЖК' })].concat(COST_FIELDS.map(function (f) { return h('th', { text: f[1] + ', грн' }); })));
+    var tbody = h('tbody');
+    ZK_ORDER.forEach(function (zk) {
+      var c = costs[zk] || {}, k = app.ctx.koshtPlan && app.ctx.koshtPlan[zk];
+      var def = { planAdmin: k ? k.articles.filter(function (a) { return a.key === 'admin'; })[0].season : '',
+        planOper: k ? k.articles.filter(function (a) { return a.key === 'oper'; })[0].season * REP_VAT : '' };
+      tbody.appendChild(h('tr', { 'data-zk': zk }, [h('td', { text: zk })].concat(COST_FIELDS.map(function (f) {
+        var v = c[f[0]];
+        return h('td', {}, [h('input', { 'data-f': f[0], inputmode: 'decimal', 'aria-label': zk + ': ' + f[1],
+          value: v === '' || v === undefined || v === null ? '' : String(v).replace('.', ','),
+          placeholder: def[f[0]] !== undefined && def[f[0]] !== '' ? fmt(def[f[0]], 'money') : '—' })]);
+      }))));
+    });
+    return h('section', { class: 'card' }, [
+      h('h3', { text: 'Расход котельной за сезон' }),
+      h('p', { class: 'hint', text: 'Административные — без НДС, эксплуатационные — с НДС (как в смете), программа делит их на 1,2. ' +
+        'Пустой план = кошторис (серая подсказка в поле). Факт вносится в конце сезона; пока его нет, в прогнозе стоит план.' }),
+      h('div', { class: 'scroll' }, [h('table', { class: 'grid' }, [h('thead', {}, [thead]), tbody])]),
+      h('div', { class: 'bar' }, [h('button', { class: 'primary', text: 'Сохранить расход котельной', onclick: function () {
+        var out = {};
+        Array.prototype.forEach.call(tbody.children, function (tr) {
+          var o = {};
+          COST_FIELDS.forEach(function (f) {
+            var raw = $('input[data-f="' + f[0] + '"]', tr).value.replace(/\s/g, '').replace(',', '.');
+            o[f[0]] = raw === '' ? '' : engineNum(raw);
+          });
+          out[tr.getAttribute('data-zk')] = o;
+        });
+        saveStore('boilerCosts', out);
+      } })])
+    ]);
+  }
+
   var TABLE_LEGENDS = {
     overlimit: [
       ['Данные', '«факт» — месяц посчитан по введённому счёту, «план» — по плановым данным. Все суммы — по этим рабочим данным.'],
@@ -502,6 +543,14 @@
       ['Разница нараст.', 'Начислено в тарифах с ноября минус выставлено в счетах с ноября. Плюс — собрали заранее, минус — отстаём от поставщика.'],
       ['Осталось разнести', 'Сверхлимит сезона минус уже начисленный: сколько ещё войдёт в тарифы следующих месяцев. В марте — 0.'],
       ['План', 'Сравнение с планом — на вкладке «План-факт» (строки «в т.ч. сверхлимит» и «Сверхлимит начислен в тарифах»).']
+    ],
+    result: [
+      ['Результат', 'Начислено жильцам минус расход: плюс — доход, минус — убыток (выделен красным).'],
+      ['Газ', 'Начислено по газовым тарифам и счета поставщика, с НДС. По плану результат ≈ 0; в течение сезона колеблется из-за заранее собираемого сверхлимита, к концу сезона должен прийти к нулю.'],
+      ['Котельная', 'Без НДС. Начислено = тариф кошториса × площадь × доля месяца ÷ 1,2. Расход = административные + эксплуатационные ÷ 1,2 (вносятся над таблицей).'],
+      ['Факт на сегодня', 'Только месяцы с введённым счётом. Расход котельной ведётся за сезон, поэтому здесь не показывается.'],
+      ['Прогноз на конец сезона', 'Факт там, где он есть, остальное — по плану (с учётом фактического газа). Главная цифра: не уходим ли в минус.'],
+      ['Источник', 'Откуда взяты цифры прогноза: сколько месяцев по факту; расход котельной — факт, введённый план или кошторис.']
     ],
     tariffs: [
       ['Содержание котельной', 'Тариф кошториса, грн/м²; в ноябре — 50 %.'],
@@ -604,7 +653,7 @@
 
   // ---------- Приказ и Excel ----------
   function downloadExcel() {
-    var tables = app.calc.tables.map(function (t) { return REP_SUBTOTAL_IDS.indexOf(t.id) >= 0 ? repWithSubtotals(t) : (t.id === 'planfact' ? repPlanFactTotals(t) : t); }).concat(Object.keys(app.ctx.koshtFact).map(function (zk) { return repKoshtTable(zk, app.ctx.koshtFact[zk]); }));
+    var tables = app.calc.tables.map(function (t) { return REP_SUBTOTAL_IDS.indexOf(t.id) >= 0 ? repWithSubtotals(t) : (t.id === 'planfact' ? repPlanFactTotals(t) : (t.id === 'result' ? repResultMarks(t) : t)); }).concat(Object.keys(app.ctx.koshtFact).map(function (zk) { return repKoshtTable(zk, app.ctx.koshtFact[zk]); }));
     var wb = exportWorkbook(tables, window.XLSX);
     var d = new Date();
     var stamp = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);

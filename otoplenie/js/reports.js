@@ -65,9 +65,88 @@ function repBuildAll(ctx) {
       repAccrual(planCalc, workCalc, factIdx, ctx.koshtPlan, ctx.koshtFact),
       repOverlimit(planIdx, workCalc, factIdx),
       repPlanFact(planIdx, workCalc, factIdx, ctx.koshtPlan, ctx.koshtFact),
-      repDetails(workCalc)
+      repDetails(workCalc),
+      repResult(planCalc, workCalc, factIdx, ctx.koshtPlan, ctx.koshtFact, ctx.boilerCosts || {})
     ]
   };
+}
+
+/**
+ * 6. Результат сезона по ЖК: начислено − расход = результат (+ доход, − убыток).
+ * Газ — с НДС (начисление и счета поставщика с НДС, налог взаимно сокращается).
+ * Котельная — без НДС: начислено ÷ 1,2; расход = административные (без НДС) + эксплуатационные (с НДС) ÷ 1,2.
+ * costs: { zk: { planAdmin, planOper, factAdmin, factOper } } — суммы за сезон; пустой план = кошторис.
+ * Прогноз на конец сезона: газ — факт за месяцы с фактом + план (рабочие данные) остальных; котельная — факт расхода, если внесён, иначе план.
+ */
+var REP_VAT = 1.2;
+
+function repResultCostPlan(kosht, c) {
+  var hasPlan = c && (c.planAdmin !== '' && c.planAdmin !== undefined && c.planAdmin !== null ||
+    c.planOper !== '' && c.planOper !== undefined && c.planOper !== null);
+  if (hasPlan) return { value: engineNum(c.planAdmin) + engineNum(c.planOper) / REP_VAT, src: 'план введён' };
+  return { value: kosht ? kosht.season.net : 0, src: kosht ? 'план = кошторис' : 'нет кошториса' };
+}
+
+function repResult(planCalc, workCalc, factIdx, koshtPlan, koshtFact, costs) {
+  var rows = [];
+  var sum = function (list, f) { return list.reduce(function (s, r) { return s + engineNum(f(r)); }, 0); };
+  var all = { accGasP: 0, accGasD: 0, accGasF: 0, billP: 0, billD: 0, billF: 0, accBP: 0, accBD: 0, accBF: 0, costP: 0, costF: 0 };
+  var push = function (zk, item, plan, toDate, fc, src) {
+    rows.push([zk, item, plan, toDate, fc, typeof plan === 'number' && typeof fc === 'number' ? fc - plan : '', src]);
+  };
+  var block = function (zk, v, srcGas, srcCost) {
+    push(zk, 'Начислено жильцам: газ (с НДС)', v.accGasP, v.accGasD, v.accGasF, srcGas);
+    push(zk, 'Расход: газ — счета поставщика (с НДС)', v.billP, v.billD, v.billF, srcGas);
+    push(zk, 'Результат: газ', v.accGasP - v.billP, v.billD === '' ? '' : v.accGasD - v.billD, v.accGasF - v.billF, '');
+    push(zk, 'Начислено жильцам: котельная (без НДС)', v.accBP, v.accBD, v.accBF, 'тариф кошториса × площадь ÷ 1,2');
+    push(zk, 'Расход: котельная (без НДС)', v.costP, '', v.costF, srcCost);
+    push(zk, 'Результат: котельная', v.accBP - v.costP, '', v.accBF - v.costF, '');
+    push(zk, 'Результат итого', v.accGasP - v.billP + v.accBP - v.costP, '', v.accGasF - v.billF + v.accBF - v.costF, '');
+  };
+  ZK_ORDER.forEach(function (zk) {
+    var w = workCalc.filter(function (r) { return r.zk === zk; });
+    if (!w.length) return;
+    var p = planCalc.filter(function (r) { return r.zk === zk; });
+    var isF = function (r) { return repHasFact(factIdx[repKey(r)]); };
+    var wf = w.filter(isF);
+    var boiler = function (kosht, r) { return repKoshtTariff(kosht, zk) * koshtMonthShare(r.monthIdx) * repKoshtArea(kosht, zk) / REP_VAT; };
+    var c = costs[zk] || {};
+    var cp = repResultCostPlan(koshtPlan && koshtPlan[zk], c);
+    var hasFact = c.factAdmin !== '' && c.factAdmin !== undefined && c.factAdmin !== null ||
+      c.factOper !== '' && c.factOper !== undefined && c.factOper !== null;
+    var v = {
+      accGasP: sum(p, function (r) { return r.charged; }), accGasD: sum(wf, function (r) { return r.charged; }),
+      accGasF: sum(w, function (r) { return r.charged; }),
+      billP: sum(p, function (r) { return r.bill; }), billD: sum(wf, function (r) { return r.bill; }),
+      billF: sum(w, function (r) { return r.bill; }),
+      accBP: sum(p, function (r) { return boiler(koshtPlan, r); }), accBD: sum(wf, function (r) { return boiler(koshtFact, r); }),
+      accBF: sum(w, function (r) { return boiler(koshtFact, r); }),
+      costP: cp.value, costF: hasFact ? engineNum(c.factAdmin) + engineNum(c.factOper) / REP_VAT : cp.value
+    };
+    var srcGas = wf.length === w.length ? 'факт за все месяцы' : wf.length ? 'факт ' + wf.length + ' мес. + план ' + (w.length - wf.length) + ' мес.' : 'нет факта — план';
+    if (!wf.length) { v.accGasD = ''; v.billD = ''; v.accBD = ''; }
+    Object.keys(all).forEach(function (k) { if (typeof v[k] === 'number') all[k] += v[k]; });
+    block(zk, v, srcGas, hasFact ? 'факт за сезон' : cp.src + ' (факта ещё нет)');
+  });
+  if (rows.length > 7) block('Все ЖК', all, '', '');
+  return {
+    id: 'result', title: 'Результат сезона: начислено − расход',
+    note: 'Плюс — доход, минус — убыток. Газ — с НДС (в начислении и в счетах поставщика он одинаков и сокращается). ' +
+      'Котельная — без НДС: начислено ÷ 1,2; расход = административные (без НДС) + эксплуатационные (с НДС) ÷ 1,2. ' +
+      '«Факт на сегодня» — только месяцы с введённым счётом. «Прогноз на конец сезона» — факт там, где он есть, остальное по плану. Расход котельной — за сезон: до ввода факта берётся план.',
+    headers: ['ЖК', 'Статья', 'План на сезон, грн', 'Факт на сегодня, грн', 'Прогноз на конец сезона, грн', 'Прогноз − план, грн', 'Источник'],
+    formats: ['text', 'text', 'money', 'money', 'money', 'money', 'text'],
+    rows: rows
+  };
+}
+
+/** Строки «Результат…» выделяются как итоговые (и после фильтра). */
+function repResultMarks(t) {
+  var copy = {};
+  Object.keys(t).forEach(function (k) { copy[k] = t[k]; });
+  copy.totalIdx = [];
+  t.rows.forEach(function (r, i) { if (String(r[1]).indexOf('Результат') === 0) copy.totalIdx.push(i); });
+  return copy;
 }
 
 function repKoshtTariff(kosht, zk) {
