@@ -159,7 +159,7 @@ function orderDocument(o, D) {
   para('КОШТОРИС ВИТРАТ НА УТРИМАННЯ ТА ОБСЛУГОВУВАННЯ КОТЕЛЬНІ', { bold: true, center: true, after: 0 });
   para('на опалювальний сезон 2026/2027', { bold: true, center: true, after: 120 });
   para(title + ', ' + req.address, { center: true, after: 40 });
-  para('Опалювана площа: ' + uaNum(k.area) + ' м² · Період нарахування: ' + uaMonths(k.months) + ' міс. (15 листопада 2026 – березень 2027)', { center: true, size: 11, after: 160 });
+  para('Опалювана площа: ' + uaNum(k.area) + ' м² · Період нарахування: ' + uaMonths(k.months) + ' міс. (' + (koshtMonthShare(0, k.months) >= 1 ? 'листопад' : '15 листопада') + ' 2026 – березень 2027)', { center: true, size: 11, after: 160 });
   var cells = [['№', 'Стаття витрат', 'грн/м² на місяць', 'грн на місяць', 'грн за сезон (' + uaMonths(k.months) + ' міс.)']];
   var bold = [];
   var groupNo = { admin: '1', oper: '2' };
@@ -172,7 +172,7 @@ function orderDocument(o, D) {
   cells.push(['', 'ПДВ 20 %', uaNum(k.perM2.vat), uaNum(k.perMonth.vat), uaNum(k.season.vat)]);
   cells.push(['', 'Всього з ПДВ', uaNum(k.perM2.gross), uaNum(k.perMonth.gross), uaNum(k.season.gross)]);
   table(cells, [600, 4400, 1500, 1600, 1700], bold);
-  para('Тариф на утримання котельні = Всього з ПДВ за сезон ÷ опалювана площа ÷ ' + uaMonths(k.months) + ' (кількість місяців нарахування); за листопад нараховується 50 % тарифу. Розподіл ФСО та МЗК до цього тарифу не включається (входить лише до вартості енергоносія).', { justify: true, size: 10, after: 240 });
+  para('Тариф на утримання котельні = Всього з ПДВ за сезон ÷ опалювана площа ÷ ' + uaMonths(k.months) + ' (кількість місяців нарахування); ' + koshtNovNote(k.months) + '. Розподіл ФСО та МЗК до цього тарифу не включається (входить лише до вартості енергоносія).', { justify: true, size: 10, after: 240 });
   para('Бухгалтер ______________');
 
   // --- Додаток 2 ---
@@ -193,7 +193,7 @@ function orderDocument(o, D) {
     if (hasMeters) line.push(uaNum(r.price));
     line.push(uaNum(r.tNo));
     if (hasSpch) line.push(uaNum(r.tSpch));
-    line.push(uaNum(engineRound(k.tariff * koshtMonthShare(r.monthIdx), 2)), r.source === 'факт' ? 'факт' : 'план');
+    line.push(uaNum(engineRound(k.tariff * koshtMonthShare(r.monthIdx, k.months), 2)), r.source === 'факт' ? 'факт' : 'план');
     c2.push(line);
   });
   table(c2, widths);
@@ -216,7 +216,7 @@ function orderDocument(o, D) {
     'Приміщення без вузлів обліку оплачують залишок обсягу (Q − ФСО − МЗК − показання вузлів обліку) пропорційно опалюваній площі.',
     'Для приміщень, відключених від внутрішньобудинкової системи опалення (СПЧ), застосовується мінімальна частка ' + Math.round(S.kSpch * 100) + ' % тарифу для приміщень без вузлів обліку (розділ VI Методики № 315).',
     'Вартість газу понад ліміт, виставлена постачальником, розподіляється на весь опалювальний сезон: частина — надбавкою до ціни 1 Гкал, частина — на приміщення без вузлів обліку і СПЧ за профілем квитанції. Загальна сума нарахувань за сезон дорівнює сумі рахунків постачальника.',
-    'Тариф на утримання котельні встановлюється єдиним на сезон: сума кошторису з ПДВ ÷ опалювана площа ÷ ' + uaMonths(k.months) + ' (кількість місяців нарахування); за листопад — 50 % тарифу.',
+    'Тариф на утримання котельні встановлюється єдиним на сезон: сума кошторису з ПДВ ÷ опалювана площа ÷ ' + uaMonths(k.months) + ' (кількість місяців нарахування); ' + koshtNovNote(k.months) + '.',
     'Підприємство є платником ПДВ; ПДВ нараховується на повну вартість послуги з опалення за ставкою 20 %.'
   ].forEach(function (t, i) { para((i + 1) + '. ' + t, { justify: true, indent: true }); });
   para('', { after: 240 });

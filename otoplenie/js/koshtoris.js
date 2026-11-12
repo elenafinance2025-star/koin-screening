@@ -158,6 +158,14 @@ function koshtCompute(smeta, map, area, manual, vatRate) {
 }
 
 /** Доля месяца в начислении содержания котельной: ноябрь — с 15-го, половина. */
-function koshtMonthShare(monthIdx) {
-  return monthIdx === 0 ? 0.5 : 1;
+/** Доля тарифа котельной в месяце: ноябрь = число месяцев начисления − 4 (4,5 → 50 %, 5 → 100 %), остальные — 100 %. */
+function koshtMonthShare(monthIdx, months) {
+  var m = engineNum(months) || 4.5;
+  return monthIdx === 0 ? Math.max(0, Math.min(1, m - 4)) : 1;
+}
+
+/** Подпись ноября для приказа и подсказок. */
+function koshtNovNote(months) {
+  var share = koshtMonthShare(0, months);
+  return share >= 1 ? 'листопад — повний місяць' : 'за листопад — ' + Math.round(share * 100) + ' % тарифу';
 }

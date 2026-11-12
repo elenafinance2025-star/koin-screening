@@ -109,7 +109,7 @@ function repResult(planCalc, workCalc, factIdx, koshtPlan, koshtFact, costs) {
     var p = planCalc.filter(function (r) { return r.zk === zk; });
     var isF = function (r) { return repHasFact(factIdx[repKey(r)]); };
     var wf = w.filter(isF);
-    var boiler = function (kosht, r) { return repKoshtTariff(kosht, zk) * koshtMonthShare(r.monthIdx) * repKoshtArea(kosht, zk) / REP_VAT; };
+    var boiler = function (kosht, r) { return repKoshtTariff(kosht, zk) * koshtMonthShare(r.monthIdx, repKoshtMonths(kosht, zk)) * repKoshtArea(kosht, zk) / REP_VAT; };
     var c = costs[zk] || {};
     var cp = repResultCostPlan(koshtPlan && koshtPlan[zk], c);
     var hasFact = c.factAdmin !== '' && c.factAdmin !== undefined && c.factAdmin !== null ||
@@ -149,6 +149,10 @@ function repResultMarks(t) {
   return copy;
 }
 
+function repKoshtMonths(kosht, zk) {
+  return kosht && kosht[zk] ? kosht[zk].months : 4.5;
+}
+
 function repKoshtTariff(kosht, zk) {
   return kosht && kosht[zk] ? kosht[zk].tariff : 0;
 }
@@ -167,7 +171,7 @@ function repTariffs(calc, koshtFact) {
       'Расчётно начислено (газ), грн', 'Расхождение, грн', 'Статус'],
     formats: ['text', 'text', 'text', 'text', 'money', 'tariff', 'tariff', 'tariff', 'tariff', 'money', 'money', 'text'],
     rows: calc.map(function (r) {
-      var kt = repKoshtTariff(koshtFact, r.zk) * koshtMonthShare(r.monthIdx);
+      var kt = repKoshtTariff(koshtFact, r.zk) * koshtMonthShare(r.monthIdx, repKoshtMonths(koshtFact, r.zk));
       return [r.month, r.receipt, r.zk, r.source || 'план', r.bill, engineRound(kt, 2), r.price, r.tNo, r.tSpch,
         r.charged, r.diff, r.status2];
     })
@@ -184,9 +188,8 @@ function repAccrual(planCalc, workCalc, factIdx, koshtPlan, koshtFact) {
     // Запас = начислено жильцам по газовым тарифам − счёт поставщика (плюс — собрано больше счёта, минус — меньше)
     var reserveFact = isFact ? w.charged - w.bill : '';
     if (isFact) reserveAcc[w.zk] = (reserveAcc[w.zk] || 0) + reserveFact;
-    var share = koshtMonthShare(w.monthIdx);
-    var boilerPlan = repKoshtTariff(koshtPlan, w.zk) * share * repKoshtArea(koshtPlan, w.zk);
-    var boilerFact = repKoshtTariff(koshtFact, w.zk) * share * repKoshtArea(koshtFact, w.zk);
+    var boilerPlan = repKoshtTariff(koshtPlan, w.zk) * koshtMonthShare(w.monthIdx, repKoshtMonths(koshtPlan, w.zk)) * repKoshtArea(koshtPlan, w.zk);
+    var boilerFact = repKoshtTariff(koshtFact, w.zk) * koshtMonthShare(w.monthIdx, repKoshtMonths(koshtFact, w.zk)) * repKoshtArea(koshtFact, w.zk);
     var f = function (v) { return isFact ? v : ''; };
     var d = function (a, b) { return isFact ? a - b : ''; };
     return [w.month, w.zk,
@@ -198,7 +201,7 @@ function repAccrual(planCalc, workCalc, factIdx, koshtPlan, koshtFact) {
   });
   return {
     id: 'accrual', title: 'Начисление: содержание котельной и расход газа (план / факт)',
-    note: 'Котельная: тариф кошториса × площадь × доля месяца (ноябрь — 50 %). Газ: объём, счёт поставщика и начислено по газовым тарифам. Факт показывается только для месяцев с введёнными счетами.',
+    note: 'Котельная: тариф кошториса × площадь × доля месяца (ноябрь — 50 % при 4,5 мес., 100 % при 5 мес.). Газ: объём, счёт поставщика и начислено по газовым тарифам. Факт показывается только для месяцев с введёнными счетами.',
     headers: ['Месяц', 'ЖК',
       'Котельная план, грн', 'Котельная факт, грн', 'Котельная Δ, грн',
       'Газ план, тыс. м³', 'Газ факт, тыс. м³', 'Газ Δ, тыс. м³',
@@ -254,9 +257,8 @@ function repPlanFact(planIdx, workCalc, factIdx, koshtPlan, koshtFact) {
   workCalc.forEach(function (w) {
     var p = planIdx[repKey(w)] || {};
     var isFact = repHasFact(factIdx[repKey(w)]);
-    var share = koshtMonthShare(w.monthIdx);
-    var boilerItems = [['Содержание котельной, грн/м²', repKoshtTariff(koshtPlan, w.zk) * share,
-      repKoshtTariff(koshtFact, w.zk) * share, 'tariff']];
+    var boilerItems = [['Содержание котельной, грн/м²', repKoshtTariff(koshtPlan, w.zk) * koshtMonthShare(w.monthIdx, repKoshtMonths(koshtPlan, w.zk)),
+      repKoshtTariff(koshtFact, w.zk) * koshtMonthShare(w.monthIdx, repKoshtMonths(koshtFact, w.zk)), 'tariff']];
     items.map(function (it) { return [it[0], engineNum(p[it[1]]), engineNum(w[it[1]]), it[2]]; })
       .concat(boilerItems)
       .forEach(function (it) {
