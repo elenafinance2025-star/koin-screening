@@ -26,7 +26,7 @@ check('сверхлимит Лимноса: начислено за сезон =
   Math.abs(limOlCh - 650000) < 0.01 && Math.abs(lim[4][7] - (limOlCh - limOlBill)) < 0.01 && Math.abs(lim[4][7]) < 0.01 && Math.abs(lim[4][8]) < 0.01);
 check('сверхлимит: 9 колонок, плановых нет', ol.headers.length === 9 && ol.headers.join('|').indexOf('План') < 0);
 var acc = res.tables[1].rows[0];
-check('котельная Лимнос ноябрь план = 11,47 × 0,5 × 25 162,6 (' + acc[2].toFixed(2) + ')', Math.abs(acc[2] - 11.47 * 0.5 * 25162.6) < 0.01);
+check('котельная Лимнос ноябрь план = тариф × 0,5 × 25 162,6 (' + acc[2].toFixed(2) + ')', Math.abs(acc[2] - kosht['Лимнос'].tariff * 0.5 * 25162.6) < 0.01);
 var sub = ctx.repWithSubtotals(res.tables[1]);
 var limTot = sub.rows[sub.totalIdx[0]];
 var limRows = res.tables[1].rows.filter(function (r) { return r[1] === 'Лимнос'; });

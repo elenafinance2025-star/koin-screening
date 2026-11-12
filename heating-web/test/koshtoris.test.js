@@ -19,6 +19,27 @@ Object.keys(maps).forEach(function (zk) {
   var chk = Math.abs(k.season.gross - k.season.net * 1.2) < 0.01 && k.tariff > 0;
   if (!chk) { failed++; console.log('FAIL'); }
 });
+// Лимнос 26/27 по смете от 12.11.2026 (помесячные «факт», ноя…мар) — как расчёт Елены: 1 394 602,80 с НДС
+var five = function (x) { return [x, x, x, x, x]; };
+var sm2 = {
+  '8': five(17930), '10': five(33810), '12': five(23283),
+  '14': [33908.39, 43889.46, 47500.84, 43889.46, 42341.73],       // адмін-накладні 6 %
+  '17': five(30672), '20': five(131.08),
+  '23': [3235.44, 4799.14, 5364.92, 4799.14, 4556.66],            // налог на прибыль 1 %
+  '27': five(83901.25),
+  '29': five(500), '30': five(7544.80), '31': five(7800), '32': five(773.44), '34': five(600), '35': five(741.94)
+};
+var k2 = ctx.koshtCompute(sm2, maps['Лимнос'], 25162.6, {});
+var ok2 = Math.abs(k2.season.gross - 1394602.80) < 0.05 && k2.tariff === 12.32;
+console.log((ok2 ? 'OK   ' : 'FAIL ') + 'Лимнос 26/27: с НДС ' + k2.season.gross.toFixed(2) + ' (ожидается 1 394 602,80), тариф ' + k2.tariff);
+if (!ok2) failed++;
+var oldMap = JSON.parse(JSON.stringify(maps));
+oldMap['Лимнос'].rows.passive = [[14, 5 / 6]];
+oldMap['Гавайи'].rows.passive = [[13, 5 / 6]];
+var fixed = ctx.koshtFixOverheadFee(oldMap);
+var ok3 = fixed && oldMap['Лимнос'].rows.passive[0][1] === 1 && oldMap['Гавайи'].rows.passive[0][1] === 1 && !ctx.koshtFixOverheadFee(oldMap);
+console.log((ok3 ? 'OK   ' : 'FAIL ') + 'сохранённая таблица: накладные 5/6 → 1, повторно не меняется');
+if (!ok3) failed++;
 // Сверка логики с готовым «Кошторис Лимнос (25-26)»: ноябрь, без ПДВ 87 107,19 при фонаре 2 782,91
 console.log(failed ? '\nПРОВАЛЕНО: ' + failed : '\nКошторисы посчитаны');
 process.exit(failed ? 1 : 0);

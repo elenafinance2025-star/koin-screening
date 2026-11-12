@@ -25,6 +25,24 @@ var KOSHT_VAT_FACTOR = 5 / 6;
  * Соответствие по ЖК: лист сметы, колонка ноября (факт), ячейка площади, статьи → строки.
  * Строки налогов (НДС, ЕН) и газа/тепловой энергии в кошторис не входят.
  */
+/** Номер строки «Адмін-накладні» в смете ЖК: множитель 1 (услуга УК без НДС), а не 5/6. */
+var KOSHT_OVERHEAD_FEE_ROWS = { 'Лимнос': 14, 'Атлант': 14, 'Лузановский Парк': 15, 'Гавайи': 13 };
+
+/** Исправляет сохранённую таблицу соответствия: строка накладных с множителем 5/6 → 1. Возвращает true, если менялось. */
+function koshtFixOverheadFee(mapping) {
+  var changed = false;
+  Object.keys(KOSHT_OVERHEAD_FEE_ROWS).forEach(function (zk) {
+    var m = mapping && mapping[zk];
+    if (!m || !m.rows) return;
+    Object.keys(m.rows).forEach(function (k) {
+      (m.rows[k] || []).forEach(function (pair) {
+        if (pair[0] === KOSHT_OVERHEAD_FEE_ROWS[zk] && Math.abs(pair[1] - KOSHT_VAT_FACTOR) < 1e-9) { pair[1] = 1; changed = true; }
+      });
+    });
+  });
+  return changed;
+}
+
 function koshtDefaultMapping() {
   var v = KOSHT_VAT_FACTOR;
   return {
@@ -38,7 +56,7 @@ function koshtDefaultMapping() {
         routine: [],
         gasdist: [[27, v]],
         startup: [],
-        passive: [[14, v]]                         // админ.-накладные 6 %
+        passive: [[14, 1]]                         // админ.-накладные 6 % (услуга УК, без НДС — НДС сверху)
       }
     },
     'Атлант': {
@@ -51,7 +69,7 @@ function koshtDefaultMapping() {
         routine: [],
         gasdist: [[25, v]],
         startup: [],
-        passive: [[14, v]]
+        passive: [[14, 1]]                         // админ.-накладные 6 %
       }
     },
     'Лузановский Парк': {
@@ -66,7 +84,7 @@ function koshtDefaultMapping() {
         routine: [],
         gasdist: [[26, v]],
         startup: [],
-        passive: [[15, v]]
+        passive: [[15, 1]]                         // админ.-накладные 6 %
       }
     },
     'Гавайи': {
@@ -81,7 +99,7 @@ function koshtDefaultMapping() {
         routine: [],
         gasdist: [],
         startup: [],
-        passive: [[13, v]]                         // админ.-накладные 2 %
+        passive: [[13, 1]]                         // админ.-накладные 2 %
       }
     }
   };
