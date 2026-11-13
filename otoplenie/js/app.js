@@ -143,6 +143,13 @@
           return api('saveStore', { key: 'mappingOgVat', value: true });
         }).catch(function () { /* повторим при следующем входе */ });
       }
+      if (d.store.mapping && !d.store.mappingLpVat && koshtFixLpVat(d.store.mapping)) {
+        // Разово: смета ЛП переработана на НДС — новые номера строк
+        d.store.mappingLpVat = true;
+        api('saveStore', { key: 'mapping', value: d.store.mapping }).then(function () {
+          return api('saveStore', { key: 'mappingLpVat', value: true });
+        }).catch(function () { /* повторим при следующем входе */ });
+      }
       if (!d.store.planBackupManual) {
         // Перед переходом на расчёт счёта и сверхлимита из объёма — копия плана, введённого вручную
         var backup = { savedAt: new Date().toISOString(), rows: JSON.parse(JSON.stringify(d.plan)) };

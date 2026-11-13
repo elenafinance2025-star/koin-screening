@@ -52,6 +52,25 @@ var ogOld = JSON.parse(JSON.stringify(maps)); ogOld['Гавайи'].rows.overhea
 var okMig = ctx.koshtFixHawaiiVat(ogOld) && JSON.stringify(ogOld['Гавайи'].rows.overhead) === '[[14,1]]' && ogOld['Гавайи'].rows.service[1][0] === 23 && !ctx.koshtFixHawaiiVat(ogOld);
 console.log((okMig ? 'OK   ' : 'FAIL ') + 'сохранённая таблица Гавайев: переход на новые строки, повторно не меняется');
 if (!okMig) failed++;
+// ЛП 26/27 после перехода на НДС (смета от 13.11.2026): итого остальное 1 091 744,23, 5 мес.
+var lp = { '9': five(18150), '11': five(33222), '13': five(23117.4),
+  '14': [20982.07, 22257.32, 22859.21, 22257.32, 22016.56],                       // НДС — не берётся
+  '15': [27710.65, 33230.64, 35835.99, 33230.64, 32188.50],                        // накладные 6 %
+  '18': five(20304), '21': five(65.54),
+  '24': [2710.32, 3566.56, 3970.69, 3566.56, 3404.90],                             // налог на прибыль 1 %
+  '25': [59863.23, 145486.80, 185899.80, 145486.80, 129321.60], '26': five(211168.74),  // газ — не берётся
+  '27': five(48406.80), '29': five(640), '30': five(300), '31': five(7800), '32': five(628.66), '33': five(773.44),
+  '35': five(686.42), '36': five(420), '37': five(5877) };
+var klp = ctx.koshtCompute(lp, maps['Лузановский Парк'], 19988.1, {});
+var okLp = Math.abs(klp.season.gross - 1091744.23) < 1 && klp.tariff === 10.92;
+console.log((okLp ? 'OK   ' : 'FAIL ') + 'ЛП 26/27 (НДС, 5 мес.): с НДС ' + klp.season.gross.toFixed(2) + ' (ожидается 1 091 744,23), тариф ' + klp.tariff);
+if (!okLp) failed++;
+var lpOld = JSON.parse(JSON.stringify(maps)); lpOld['Лузановский Парк'].rows.overhead = [[24, 0.01], [25, 0.01]];
+lpOld['Лузановский Парк'].rows.gasdist = [[26, 5 / 6]]; lpOld['Лузановский Парк'].rows.service = [28, 29, 30, 31, 32, 33, 34, 35, 36].map(function (r) { return [r, 5 / 6]; });
+var okLpMig = ctx.koshtFixLpVat(lpOld) && JSON.stringify(lpOld['Лузановский Парк'].rows.overhead) === '[[24,1]]' &&
+  lpOld['Лузановский Парк'].rows.gasdist[0][0] === 27 && lpOld['Лузановский Парк'].rows.service[8][0] === 37 && !ctx.koshtFixLpVat(lpOld);
+console.log((okLpMig ? 'OK   ' : 'FAIL ') + 'сохранённая таблица ЛП: переход на новые строки, повторно не меняется');
+if (!okLpMig) failed++;
 var oldMap = JSON.parse(JSON.stringify(maps));
 oldMap['Лимнос'].rows.passive = [[14, 5 / 6]];
 oldMap['Гавайи'].rows.passive = [[13, 5 / 6]];

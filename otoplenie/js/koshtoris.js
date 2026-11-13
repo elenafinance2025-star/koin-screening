@@ -35,11 +35,29 @@ var KOSHT_OVERHEAD_FEE_ROWS = { 'Лимнос': 14, 'Атлант': 14, 'Луз�
 function koshtFixHawaiiVat(mapping) {
   var m = mapping && mapping['Гавайи'];
   if (!m || !m.rows) return false;
-  var same = function (a, b) { return JSON.stringify((a || []).map(function (p) { return [p[0], Math.round(p[1] * 1e6) / 1e6]; })) === JSON.stringify(b); };
   var v = Math.round(KOSHT_VAT_FACTOR * 1e6) / 1e6;
-  if (!same(m.rows.overhead, [[14, 0.01], [15, 0.01]]) || !same(m.rows.service, [[21, v], [22, v]])) return false;
+  if (!koshtSameRows(m.rows.overhead, [[14, 0.01], [15, 0.01]]) || !koshtSameRows(m.rows.service, [[21, v], [22, v]])) return false;
   m.rows.overhead = [[14, 1]];
   m.rows.service = [[22, KOSHT_VAT_FACTOR], [23, KOSHT_VAT_FACTOR]];
+  return true;
+}
+
+function koshtSameRows(a, b) {
+  return JSON.stringify((a || []).map(function (p) { return [p[0], Math.round(p[1] * 1e6) / 1e6]; })) === JSON.stringify(b);
+}
+
+/**
+ * Лузановский Парк: смета переработана на НДС — после «Газ:» добавлена строка «налог на прибыль 1 %» (24),
+ * газ, распределение газа и услуги сдвинулись на 1. Меняет сохранённую таблицу, только если в ней прежняя схема.
+ */
+function koshtFixLpVat(mapping) {
+  var m = mapping && mapping['Лузановский Парк'];
+  if (!m || !m.rows) return false;
+  var v = Math.round(KOSHT_VAT_FACTOR * 1e6) / 1e6;
+  if (!koshtSameRows(m.rows.overhead, [[24, 0.01], [25, 0.01]]) || !koshtSameRows(m.rows.gasdist, [[26, v]])) return false;
+  m.rows.overhead = [[24, 1]];
+  m.rows.gasdist = [[27, KOSHT_VAT_FACTOR]];
+  m.rows.service = (m.rows.service || []).map(function (p) { return [p[0] + 1, p[1]]; });
   return true;
 }
 
@@ -88,16 +106,16 @@ function koshtDefaultMapping() {
       }
     },
     'Лузановский Парк': {
-      sheet: 'ЛП 26-27', novCol: 'Q', areaCell: 'Q3', months: 4.5,
+      sheet: 'ЛП 26-27', novCol: 'Q', areaCell: 'Q3', months: 5,
       rows: {
-        // Смета ещё на едином налоге: строку «Налоги, ЕН 6 %» (14) не берём, налог на прибыль 1 % считаем
-        // как у Лимноса и Атланта — от газа (стр. 24 и сверхлимит 25); НДС 20 % начисляется сверху
-        overhead: [[24, 0.01], [25, 0.01]],
+        // Смета 2026/27 переработана на НДС (13.11.2026): стр. 14 «Налоги, НДС» не берём (НДС 20 % сверху),
+        // стр. 24 — налог на прибыль 1 %, стр. 25–26 — газ (в кошторис не входит)
+        overhead: [[24, 1]],
         mgmt: [[9, 1], [11, 1], [13, 1]],
-        service: [[28, v], [29, v], [30, v], [31, v], [32, v], [33, v], [34, v], [35, v], [36, v]],
+        service: [[29, v], [30, v], [31, v], [32, v], [33, v], [34, v], [35, v], [36, v], [37, v]],
         utilities: [[18, v], [19, v], [21, v]],
         routine: [],
-        gasdist: [[26, v]],
+        gasdist: [[27, v]],
         startup: [],
         passive: [[15, 1]]                         // админ.-накладные 6 %
       }
