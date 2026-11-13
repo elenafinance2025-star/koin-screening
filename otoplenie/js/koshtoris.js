@@ -197,6 +197,25 @@ function koshtMonthShare(monthIdx, months) {
   return monthIdx === 0 ? Math.max(0, Math.min(1, m - 4)) : 1;
 }
 
+/** Статьи, которые не показываются, пока по ним 0 (во всех ЖК пусто). */
+var KOSHT_HIDE_IF_ZERO = ['routine', 'startup'];
+
+/** Статьи для показа (кошторис на странице, Excel, приказ): пустые из KOSHT_HIDE_IF_ZERO скрыты, номера внутри группы — подряд. */
+function koshtShownArticles(k) {
+  var counter = {};
+  return k.articles.filter(function (a) {
+    return !(KOSHT_HIDE_IF_ZERO.indexOf(a.key) >= 0 && Math.abs(a.season) < 0.005);
+  }).map(function (a) {
+    if (a.group || !a.num) return a;
+    var g = a.num.split('.')[0];
+    counter[g] = (counter[g] || 0) + 1;
+    var c = {};
+    Object.keys(a).forEach(function (x) { c[x] = a[x]; });
+    c.num = g + '.' + counter[g];
+    return c;
+  });
+}
+
 /** Подпись ноября для приказа и подсказок. */
 function koshtNovNote(months) {
   var share = koshtMonthShare(0, months);

@@ -76,6 +76,6 @@ check('результат: одно поле с НДС — план 1 394 602,80
 check('результат: строк «без НДС» нет', !r3.some(function (r) { return /без НДС/.test(r[1]); }));
 var marks = ctx.repResultMarks(rt);
 check('результат: строки «Результат…» выделены', marks.totalIdx.length === 3 * 5);
-check('кошторис-таблица', ctx.repKoshtTable('Лимнос', kosht['Лимнос']).rows.length === 13);
+check('кошторис-таблица: пустые статьи скрыты', ctx.repKoshtTable('Лимнос', kosht['Лимнос']).rows.length === ctx.koshtShownArticles(kosht['Лимнос']).length + 3 && ctx.koshtShownArticles(kosht['Лимнос']).length === 8);
 console.log(failed ? '\nПРОВАЛЕНО: ' + failed : '\nОтчёты собраны');
 process.exit(failed ? 1 : 0);

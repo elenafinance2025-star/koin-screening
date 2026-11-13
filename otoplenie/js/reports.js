@@ -301,7 +301,7 @@ function repDetails(calc) {
 
 /** Таблица кошториса одного ЖК для отчёта / Excel. */
 function repKoshtTable(zk, k) {
-  var rows = k.articles.map(function (a) {
+  var rows = koshtShownArticles(k).map(function (a) {
     return [a.num, a.title, a.perM2, a.perMonth, a.season].concat(a.monthly);
   });
   rows.push(['', 'Всього, без ПДВ', k.perM2.net, k.perMonth.net, k.season.net].concat(k.net));
@@ -310,7 +310,7 @@ function repKoshtTable(zk, k) {
   return {
     id: 'kosht_' + zk, title: 'Кошторис котельні — ' + zk,
     note: 'Площадь ' + k.area + ' м² · ' + k.months + ' міс. · тариф ' + k.tariff + ' грн/м² на місяць (у т.ч. ПДВ ' +
-      k.tariffVat + '), листопад — 50 %.',
+      k.tariffVat + '), ' + koshtNovNote(k.months) + '.',
     headers: ['№', 'Стаття витрат', 'грн/м² на місяць', 'грн на місяць', 'грн за сезон'].concat(
       ['листопад', 'грудень', 'січень', 'лютий', 'березень']),
     formats: ['text', 'text', 'tariff', 'money', 'money', 'money', 'money', 'money', 'money', 'money'],

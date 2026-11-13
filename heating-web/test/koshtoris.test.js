@@ -71,6 +71,11 @@ var okLpMig = ctx.koshtFixLpVat(lpOld) && JSON.stringify(lpOld['Лузановс
   lpOld['Лузановский Парк'].rows.gasdist[0][0] === 27 && lpOld['Лузановский Парк'].rows.service[8][0] === 37 && !ctx.koshtFixLpVat(lpOld);
 console.log((okLpMig ? 'OK   ' : 'FAIL ') + 'сохранённая таблица ЛП: переход на новые строки, повторно не меняется');
 if (!okLpMig) failed++;
+var shown = ctx.koshtShownArticles(k2);
+var okShown = !shown.some(function (a) { return a.key === 'routine' || a.key === 'startup'; }) &&
+  shown.filter(function (a) { return !a.group; }).map(function (a) { return a.num; }).join(' ') === '1.1 1.2 2.1 2.2 2.3 2.4';
+console.log((okShown ? 'OK   ' : 'FAIL ') + 'пустые «Регламентні» и «Пусконалагоджувальні» скрыты, номера подряд: ' + shown.filter(function (a) { return !a.group; }).map(function (a) { return a.num; }).join(' '));
+if (!okShown) failed++;
 var oldMap = JSON.parse(JSON.stringify(maps));
 oldMap['Лимнос'].rows.passive = [[14, 5 / 6]];
 oldMap['Гавайи'].rows.passive = [[13, 5 / 6]];

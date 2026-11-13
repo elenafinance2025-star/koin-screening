@@ -163,7 +163,7 @@ function orderDocument(o, D) {
   var cells = [['№', 'Стаття витрат', 'грн/м² на місяць', 'грн на місяць', 'грн за сезон (' + uaMonths(k.months) + ' міс.)']];
   var bold = [];
   var groupNo = { admin: '1', oper: '2' };
-  k.articles.forEach(function (a) {
+  koshtShownArticles(k).forEach(function (a) {
     if (a.group) bold.push(cells.length);
     cells.push([a.group ? groupNo[a.key] : a.num, a.title, uaNum(a.perM2), uaNum(a.perMonth), uaNum(a.season)]);
   });
