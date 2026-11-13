@@ -39,6 +39,19 @@ var ok5 = k5.tariff === 11.08 && ctx.koshtMonthShare(0, 5) === 1 && ctx.koshtMon
   Math.abs(k5.tariff * 25162.6 * 5 - 1394602.80) < 0.005 * 25162.6 * 5;
 console.log((ok5 ? 'OK   ' : 'FAIL ') + 'Лимнос, 5 мес.: тариф ' + k5.tariff + ' (ожидается 11,08), ноябрь полностью');
 if (!ok5) failed++;
+// Гавайи 26/27 после перехода на НДС (смета от 13.11.2026): итого остальное 279 224,27, тариф 3,15
+var og = { '8': [9166.67, 18333.33, 18333.33, 18333.33, 18333.33], '10': [3456, 6912, 6912, 6912, 6912], '11': [4125, 8250, 8250, 8250, 8250],
+  '12': [3707.58, 7415.15, 7415.15, 7415.15, 7415.15], '13': [3735.91, 7321.44, 7321.44, 7321.44, 7321.44],
+  '14': [1577.14, 3154.27, 3154.27, 3154.27, 3154.27], '15': [157304.18, 314608.35, 314608.35, 314608.35, 314608.35], '16': [3684.19, 0, 0, 0, 0],
+  '22': [2661.73, 5323.47, 5323.47, 5323.47, 5323.47], '23': [2661.73, 5323.47, 5323.47, 5323.47, 5323.47] };
+var kog = ctx.koshtCompute(og, maps['Гавайи'], 19703.6, {});
+var okOg = Math.abs(kog.season.gross - 279224.27) < 1 && kog.tariff === 3.15;
+console.log((okOg ? 'OK   ' : 'FAIL ') + 'Гавайи 26/27 (НДС): с НДС ' + kog.season.gross.toFixed(2) + ' (ожидается 279 224,27), тариф ' + kog.tariff);
+if (!okOg) failed++;
+var ogOld = JSON.parse(JSON.stringify(maps)); ogOld['Гавайи'].rows.overhead = [[14, 0.01], [15, 0.01]]; ogOld['Гавайи'].rows.service = [[21, 5 / 6], [22, 5 / 6]];
+var okMig = ctx.koshtFixHawaiiVat(ogOld) && JSON.stringify(ogOld['Гавайи'].rows.overhead) === '[[14,1]]' && ogOld['Гавайи'].rows.service[1][0] === 23 && !ctx.koshtFixHawaiiVat(ogOld);
+console.log((okMig ? 'OK   ' : 'FAIL ') + 'сохранённая таблица Гавайев: переход на новые строки, повторно не меняется');
+if (!okMig) failed++;
 var oldMap = JSON.parse(JSON.stringify(maps));
 oldMap['Лимнос'].rows.passive = [[14, 5 / 6]];
 oldMap['Гавайи'].rows.passive = [[13, 5 / 6]];
