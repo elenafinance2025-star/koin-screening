@@ -129,26 +129,23 @@
       return d;
     }).then(function (d) {
       app.data = d;
-      if (d.store.mapping && !d.store.mappingFeeFix && koshtFixOverheadFee(d.store.mapping)) {
-        // Разово: «Адмін-накладні» в сохранённой таблице соответствия — множитель 1 вместо 5/6
-        d.store.mappingFeeFix = true;
-        api('saveStore', { key: 'mapping', value: d.store.mapping }).then(function () {
-          return api('saveStore', { key: 'mappingFeeFix', value: true });
-        }).catch(function () { /* повторим при следующем входе */ });
-      }
-      if (d.store.mapping && !d.store.mappingOgVat && koshtFixHawaiiVat(d.store.mapping)) {
-        // Разово: смета Гавайев переработана на НДС — новые номера строк
-        d.store.mappingOgVat = true;
-        api('saveStore', { key: 'mapping', value: d.store.mapping }).then(function () {
-          return api('saveStore', { key: 'mappingOgVat', value: true });
-        }).catch(function () { /* повторим при следующем входе */ });
-      }
-      if (d.store.mapping && !d.store.mappingLpVat && koshtFixLpVat(d.store.mapping)) {
-        // Разово: смета ЛП переработана на НДС — новые номера строк
-        d.store.mappingLpVat = true;
-        api('saveStore', { key: 'mapping', value: d.store.mapping }).then(function () {
-          return api('saveStore', { key: 'mappingLpVat', value: true });
-        }).catch(function () { /* повторим при следующем входе */ });
+      if (d.store.mapping) {
+        // Разовые правки сохранённой таблицы соответствия — одним сохранением (раньше параллельные сохранения
+        // могли затереть друг друга). Правки по сметам ЛП и Гавайев срабатывают только на старой схеме строк.
+        var fixed = [];
+        if (!d.store.mappingFeeFix && koshtFixOverheadFee(d.store.mapping)) fixed.push('mappingFeeFix');
+        if (koshtFixHawaiiVat(d.store.mapping)) fixed.push('mappingOgVat');
+        if (koshtFixLpVat(d.store.mapping)) fixed.push('mappingLpVat');
+        if (fixed.length) {
+          var saveFlags = function () {
+            return fixed.reduce(function (p, k) {
+              d.store[k] = true;
+              return p.then(function () { return api('saveStore', { key: k, value: true }); });
+            }, Promise.resolve());
+          };
+          api('saveStore', { key: 'mapping', value: d.store.mapping }).then(saveFlags)
+            .catch(function () { /* повторим при следующем входе */ });
+        }
       }
       if (!d.store.planBackupManual) {
         // Перед переходом на расчёт счёта и сверхлимита из объёма — копия плана, введённого вручную
