@@ -105,5 +105,17 @@ var ovr = rm.tables[2].rows.filter(function (r) { return r[1] === 'Лузано�
 check('отчёты: «Сверхлимит» — начислено в ноябре 11 × 27 785,36, в счёте 0; к марту разница ≈ 0', near(ovr[0][6], 11 * 27785.36, 0.01) && ovr[0][5] === 0 && Math.abs(ovr[4][7]) < 1);
 var resLp = rm.tables[5].rows.filter(function (r) { return r[0] === 'Лузановский Парк'; });
 check('отчёты: «Результат» — расход по газу = счета поставщика', near(resLp[1][2], rSum, 0.05));
+
+// Режим «в ноль по счёту месяца»: Атлант (газ без лимита) и Гавайи (покупное тепло) — начислено = счёт каждого месяца
+var TB = JSON.parse(JSON.stringify(T)); TB['Атлант'].limitRule = 'bill'; TB['Гавайи'].limitRule = 'bill';
+var SB = ctx.engineDefaultSettings(); ['Атлант', 'Гавайи'].forEach(function (z) { SB.zk[z].smoothRest = 'нет'; SB.zk[z].smoothPrice = 'по месяцам'; });
+var rb = ctx.repBuildAll({ plan: ctx.seedPlanRows(), fact: [], settings: SB, gasTariffs: TB, koshtPlan: {}, koshtFact: {} });
+['Атлант', 'Гавайи'].forEach(function (z) {
+  var w = rb.workCalc.filter(function (r) { return r.zk === z; });
+  var ok = w.every(function (r) { return Math.abs(r.charged - r.billReal) <= r.tol + 1; }) && w.every(function (r) { return r.ol === 0; });
+  check(z + ': «в ноль» — начислено = счёт каждого месяца (' + w.map(function (r) { return Math.round(r.charged - r.billReal); }).join(' / ') + ')', ok);
+});
+var pb = rb.planCalc.filter(function (r) { return r.zk === 'Атлант'; });
+check('Атлант «в ноль»: план тоже без переноса, сверхлимит в счёте сохранён (' + pb[0].olReal + ')', pb[0].ol === 0 && pb[0].olReal > 0);
 console.log(failed ? '\nПРОВАЛЕНО: ' + failed : '\nГаз по лимиту считается верно');
 process.exit(failed ? 1 : 0);

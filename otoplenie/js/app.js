@@ -791,9 +791,11 @@
       if (!t.limitMonths || !t.limitMonths.length) t.limitMonths = (GAS_DEFAULT_LIMIT_MONTHS[zk] || ['', '', '', '', '']).slice();
       var ruleSel = h('select', { onchange: function () { t.limitRule = ruleSel.value; } }, [
         ['season', 'по сезонному лимиту — сглаживание по профилю'],
-        ['month', 'по месячной доле лимита — сверх доли сразу по цене сверх лимита, перерасчёт в конце сезона']
+        ['month', 'по месячной доле лимита — сверх доли сразу по цене сверх лимита, перерасчёт в конце сезона'],
+        ['bill', 'в ноль по счёту месяца — каждый месяц начисляется ровно счёт месяца, без переноса']
       ].map(function (o) { return h('option', { value: o[0], text: o[1], selected: (t.limitRule || 'season') === o[0] ? 'selected' : null }); }));
       f.appendChild(h('label', { text: 'Начисление сверхлимита жильцам' })); f.appendChild(ruleSel);
+      f.appendChild(h('span')); f.appendChild(h('span', { class: 'hint', text: '«В ноль»: дополнительно в «Режимах сглаживания» поставьте «Тариф без счётчика и СПЧ» = нет и «Цена Гкал» = по месяцам (для Гавайев цена Гкал фиксированная, её не трогать).' }));
       f.appendChild(h('label', { text: 'Доля лимита по месяцам (поставщик), тыс. м³' }));
       f.appendChild(h('div', { class: 'months5' }, ENGINE_MONTHS.map(function (m, i) {
         return h('label', { class: 'mini' }, [h('span', { text: m }), h('input', { value: t.limitMonths[i] !== '' && t.limitMonths[i] !== undefined ? String(t.limitMonths[i]).replace('.', ',') : '',

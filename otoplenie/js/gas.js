@@ -128,6 +128,23 @@ function gasToVirtual(r, s, t) {
   r.olVirtual = s.vOl;
 }
 
+/**
+ * Режим «в ноль по счёту месяца» (limitRule = 'bill'): сверхлимит и прочие суммы не размазываются по сезону —
+ * каждый месяц жильцам начисляется ровно счёт этого месяца. Работает и для газа, и для покупного тепла.
+ */
+function gasApplyBillRule(rows, tariffs) {
+  return rows.map(function (r) {
+    var t = (tariffs || {})[r.zk];
+    if (!t || t.limitRule !== 'bill') return r;
+    var c = gasCopy(r);
+    c.billReal = engineNum(c.bill);
+    c.olReal = engineNum(c.ol);
+    c.olVirtual = c.olReal;     // сверхлимит начислен в своём месяце
+    c.ol = 0;
+    return c;
+  });
+}
+
 /** План: счёт и сверхлимит каждого месяца — из объёма газа и цен ЖК. */
 function gasApplyPlan(planRows, tariffs) {
   var out = planRows.map(gasCopy);
