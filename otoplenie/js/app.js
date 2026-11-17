@@ -421,7 +421,7 @@
     var wrap = h('section', { class: 'card' });
     wrap.appendChild(h('h3', { text: t.title }));
     if (t.note) wrap.appendChild(h('p', { class: 'hint', text: t.note }));
-    var thead = h('tr', {}, t.headers.map(function (x) { return h('th', { text: x }); }));
+    var thead = h('tr', {}, t.headers.map(function (x, c) { return h('th', { text: x, class: t.formats[c] && t.formats[c] !== 'text' ? 'n' : null }); }));
     var tbody = h('tbody');
     var totals = t.totalIdx || [];
     t.rows.forEach(function (r, i) {
