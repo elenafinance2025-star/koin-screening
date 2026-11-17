@@ -363,6 +363,7 @@
       } }),
       h('span', { class: 'hint', text: 'Газ — в тыс. м³, как в счетах Одесагаза. «Со счётчиками» = итого − СПЧ − без счётчиков.' })
     ]));
+    if (gasMonthRule(app.ctx.gasTariffs[app.zk])) main.appendChild(overManualCard());
     var bk = store('planBackupManual', null);
     // Сравнение с прежним (ручным) планом пока скрыто; копия плана хранится (planBackupManual)
     if (SHOW_PLAN_BACKUP_COMPARE && autoPlan && bk) {
@@ -387,6 +388,62 @@
       formats: ['text', 'text', 'tariff', 'tariff', 'tariff', 'money', 'text'],
       rows: calc.map(function (r) { return [r.month, r.source, r.price, r.tNo, r.tSpch, r.charged, r.status2]; })
     }));
+  }
+
+  // Режим месячной доли: досбор сверхлимита по месяцам — расчёт программы, можно исправить и сохранить
+  function overManualCard() {
+    var zk = app.zk;
+    var G = JSON.parse(JSON.stringify(app.ctx.gasTariffs));
+    var t = G[zk];
+    t.overManual = (t.overManual || ['', '', '', '', '']).slice();
+    var w = app.calc.workCalc.filter(function (r) { return r.zk === zk; });
+    var info = {};
+    w.forEach(function (r) { info[r.month] = r.gasInfo || {}; });
+    var inputs = [];
+    var head = h('tr', {}, [h('th', { text: '' })].concat(ENGINE_MONTHS.map(function (m) { return h('th', { class: 'n', text: m }); })));
+    var rowShare = h('tr', {}, [h('td', { class: 'lbl', text: 'Доля лимита, тыс. м³' })].concat(ENGINE_MONTHS.map(function (m) {
+      return h('td', { class: 'n', text: fmt(info[m].share, 'num4') });
+    })));
+    var rowNeed = h('tr', {}, [h('td', { class: 'lbl', text: 'Превышение доли нарастающим, тыс. м³' })].concat(ENGINE_MONTHS.map(function (m) {
+      return h('td', { class: 'n', text: fmt(info[m].need, 'num4') });
+    })));
+    var rowAuto = h('tr', {}, [h('td', { class: 'lbl', text: 'Досбор по расчёту, тыс. м³' })].concat(ENGINE_MONTHS.map(function (m) {
+      return h('td', { class: 'n', text: fmt(info[m].overAuto, 'num4') });
+    })));
+    var rowMan = h('tr', {}, [h('td', { class: 'lbl', text: 'Досбор к начислению, тыс. м³' })].concat(ENGINE_MONTHS.map(function (m, i) {
+      var v = t.overManual[i];
+      var inp = h('input', { class: 'num' + (v === '' || v === undefined || v === null ? '' : ' manual'), title: v === '' || v === undefined || v === null ? 'расчёт программы' : 'исправлено вручную', inputmode: 'decimal', 'aria-label': 'Досбор ' + m,
+        value: v === '' || v === undefined || v === null ? String(engineRound(engineNum(info[m].overMonth), 4)).replace('.', ',') : String(v).replace('.', ',') });
+      inp.dataset.auto = String(engineRound(engineNum(info[m].overMonth), 4));
+      inputs.push(inp);
+      return h('td', {}, [inp]);
+    })));
+    var last = info[ENGINE_MONTHS[ENGINE_MONTHS.length - 1]] || {};
+    var seasonOver = Math.max(0, engineNum(last.cum) - engineNum(t.limit));
+    var short = seasonOver - engineNum(last.collected);
+    var note = short > 0.0005 ? 'Внимание: собрано за сезон ' + fmt(last.collected, 'num4') + ' тыс. м³, а сверх сезонного лимита будет ' +
+      fmt(seasonOver, 'num4') + ' — не добрано ' + fmt(short, 'num4') + ' тыс. м³ (риск минуса). Увеличьте досбор последних месяцев.' :
+      'Собрано за сезон ' + fmt(last.collected, 'num4') + ' тыс. м³, сверх сезонного лимита — ' + fmt(seasonOver, 'num4') +
+      (last.collected - seasonOver > 0.0005 ? ' (излишек ' + fmt(last.collected - seasonOver, 'num4') + ' — к возврату перерасчётом).' : '.');
+    return h('section', { class: 'card' }, [
+      h('h3', { text: 'Досбор сверхлимита — ' + zk + ' (режим месячной доли лимита)' }),
+      h('p', { class: 'hint', text: 'Досбор — сколько тыс. м³ месяца начисляется жильцам по цене сверх лимита. Программа считает его сама (превышение накопленной доли лимита). ' +
+        'Можно исправить любую цифру и сохранить: тарифы месяца пересчитаются, недобранное перейдёт на следующие месяцы. Очистите поле — вернётся расчёт. Исправленные вручную поля выделены рамкой.' }),
+      h('div', { class: 'scroll' }, [h('table', { class: 'grid input' }, [h('thead', {}, [head]), h('tbody', {}, [rowShare, rowNeed, rowAuto, rowMan])])]),
+      h('p', { class: short > 0.0005 ? 'hint warntext' : 'hint', text: note }),
+      h('div', { class: 'bar' }, [
+        h('button', { class: 'primary', text: 'Сохранить досбор · ' + zk, onclick: function () {
+          t.overManual = inputs.map(function (inp) {
+            var v = inp.value.trim();
+            if (v === '') return '';
+            var n = engineNum(v);
+            return Math.abs(n - Number(inp.dataset.auto)) < 0.00005 && !inp.classList.contains('manual') ? '' : n;
+          });
+          saveStore('gasTariffs', G);
+        } }),
+        h('button', { text: 'Вернуть расчёт программы', onclick: function () { t.overManual = ['', '', '', '', '']; saveStore('gasTariffs', G); } })
+      ])
+    ]);
   }
 
   function closeMonth(zk, month) {

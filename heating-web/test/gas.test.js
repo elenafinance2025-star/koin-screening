@@ -106,6 +106,13 @@ check('отчёты: «Сверхлимит» — начислено в нояб
 var resLp = rm.tables[5].rows.filter(function (r) { return r[0] === 'Лузановский Парк'; });
 check('отчёты: «Результат» — расход по газу = счета поставщика', near(resLp[1][2], rSum, 0.05));
 
+
+// Ручной досбор: ЛП ноябрь 9 вместо 11 → декабрь добирает 2 + 2 = 4, за сезон собрано столько же
+var TMM = JSON.parse(JSON.stringify(TM)); TMM.overManual = [9, '', '', '', ''];
+var smm = ctx.gasSeason(TMM, vols);
+check('ручной досбор: ноябрь 9, декабрь добирает до 4 (' + smm.map(function (x) { return x.overMonth.toFixed(3); }).join(' / ') + ')',
+  near(smm[0].overMonth, 9, 1e-6) && near(smm[1].overMonth, 4, 1e-6) && near(smm[4].collected, 33, 1e-6) && smm[0].overIsManual && near(smm[0].overAuto, 11, 1e-6));
+check('ручной досбор: ноябрь дешевле на 2 × (27 785,36 − 8 082,60)', near(sm[0].vBill - smm[0].vBill, 2 * (27785.36 - 8082.6), 0.02));
 // Режим «в ноль по счёту месяца»: Атлант (газ без лимита) и Гавайи (покупное тепло) — начислено = счёт каждого месяца
 var TB = JSON.parse(JSON.stringify(T)); TB['Атлант'].limitRule = 'bill'; TB['Гавайи'].limitRule = 'bill';
 var SB = ctx.engineDefaultSettings(); ['Атлант', 'Гавайи'].forEach(function (z) { SB.zk[z].smoothRest = 'нет'; SB.zk[z].smoothPrice = 'по месяцам'; });

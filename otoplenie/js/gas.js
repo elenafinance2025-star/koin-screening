@@ -88,8 +88,16 @@ function gasSeason(t, volumes) {
       // начисление жильцам: сверх накопленной доли лимита — сразу по цене сверх лимита (собранное не уменьшается)
       cumShare += engineNum((t.limitMonths || [])[i]);
       var need = Math.max(0, cum - cumShare);
-      var overV = Math.max(0, need - collected);
+      var auto = Math.max(0, need - collected);
+      // досбор месяца можно задать вручную (overManual[i], тыс. м³); недобранное перейдёт на следующие месяцы
+      var man = (t.overManual || [])[i];
+      var manual = man !== '' && man !== undefined && man !== null && !isNaN(Number(man));
+      var overV = manual ? Math.max(0, Math.min(engineNum(man), v)) : auto;
       collected += overV;
+      out.overAuto = auto;
+      out.overIsManual = manual;
+      out.collected = collected;
+      out.need = need;
       out.share = engineNum((t.limitMonths || [])[i]);
       out.cumShare = cumShare;
       out.overMonth = overV;
