@@ -87,6 +87,10 @@ function engineCompute(inputRows, settings, journal, closed) {
       gkMeter: engineNum(src.gkMeter),
       warn: src.warn || '', gasInfo: src.gasInfo || null
     };
+    // счёт поставщика, если тарифы считаются от «начисляемого счёта» (режим месячной доли лимита, gas.js)
+    r.billReal = src.billReal !== undefined ? engineNum(src.billReal) : r.bill;
+    r.olReal = src.olReal !== undefined ? engineNum(src.olReal) : r.ol;
+    r.olVirtual = src.olVirtual !== undefined ? engineNum(src.olVirtual) : null;
     r.areaMeter = r.areaTotal - r.areaSpch - r.areaNo;
     r.monthIdx = ENGINE_MONTHS.indexOf(r.month);
     r.receipt = engineReceiptMonth(r.month, S.lag);

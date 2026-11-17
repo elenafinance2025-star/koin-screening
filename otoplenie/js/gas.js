@@ -10,11 +10,25 @@
 function gasDefaultTariffs() {
   return {
     'Лимнос': { mode: 'gas', limit: 163.70933, priceLimit: 8082.6, priceOver: 27785.36,
-      extras: [{ month: 'Март', amount: 7631.83, note: 'потери' }] },
+      limitMonths: [15.70933, 36, 43, 36, 33], extras: [{ month: 'Март', amount: 7631.83, note: 'потери' }] },
     'Атлант': { mode: 'gas', limit: 0, priceLimit: 8082.6, priceOver: 27785.36, extras: [] },
-    'Лузановский Парк': { mode: 'gas', limit: 82.40647, priceLimit: 8082.6, priceOver: 27785.36, extras: [] },
+    'Лузановский Парк': { mode: 'gas', limit: 82.40647, priceLimit: 8082.6, priceOver: 27785.36,
+      limitMonths: [7.40647, 18, 23, 18, 16], extras: [] },
     'Гавайи': { mode: 'heat', limit: 0, priceLimit: 0, priceOver: 0, extras: [] }
   };
+}
+
+/** Месячные доли лимита поставщика (тыс. м³, ноя…мар); пусто — нет. */
+var GAS_DEFAULT_LIMIT_MONTHS = { 'Лимнос': [15.70933, 36, 43, 36, 33], 'Лузановский Парк': [7.40647, 18, 23, 18, 16] };
+
+/**
+ * Режим «сверхлимит по месячной доле лимита» (limitRule = 'month'): всё, что сожгли сверх накопленной доли лимита
+ * (неиспользованная доля переносится на следующие месяцы), начисляется жильцам сразу по цене сверх лимита.
+ * Поставщик выставляет сверхлимит позже (по сезонному лимиту) — разница копится в резерве; в конце сезона перерасчёт.
+ */
+function gasMonthRule(t) {
+  if (!t || t.limitRule !== 'month') return false;
+  return (t.limitMonths || []).some(function (x) { return engineNum(x) > 0; });
 }
 
 /**
@@ -55,7 +69,7 @@ function gasExtras(t, month) {
  */
 function gasSeason(t, volumes) {
   var limit = engineNum(t.limit), pl = engineNum(t.priceLimit);
-  var cum = 0;
+  var cum = 0, monthRule = gasMonthRule(t), cumShare = 0, collected = 0;
   return ENGINE_MONTHS.map(function (m, i) {
     var po = gasPriceOver(t, i);
     var v = Math.max(0, engineNum(volumes[i]));
@@ -64,12 +78,25 @@ function gasSeason(t, volumes) {
     var before = cum;
     cum += v;
     var extra = gasExtras(t, m);
-    return {
+    var out = {
       month: m, volume: v, cumBefore: before, cum: cum, inLimit: inLimit, over: over, priceOver: po,
       limitLeft: Math.max(0, limit - cum), extra: extra,
       bill: engineRound(inLimit * pl + over * po + extra, 2),
       ol: engineRound(over * po + extra, 2)
     };
+    if (monthRule) {
+      // начисление жильцам: сверх накопленной доли лимита — сразу по цене сверх лимита (собранное не уменьшается)
+      cumShare += engineNum((t.limitMonths || [])[i]);
+      var need = Math.max(0, cum - cumShare);
+      var overV = Math.max(0, need - collected);
+      collected += overV;
+      out.share = engineNum((t.limitMonths || [])[i]);
+      out.cumShare = cumShare;
+      out.overMonth = overV;
+      out.vBill = engineRound((v - overV) * pl + overV * po + extra, 2);
+      out.vOl = engineRound(overV * po + extra, 2);
+    }
+    return out;
   });
 }
 
@@ -88,6 +115,19 @@ function gasCopy(r) {
   return c;
 }
 
+/**
+ * Режим месячной доли: тарифы считаются от «начисляемого счёта» (сверх доли — по цене сверх лимита, сразу в месяце),
+ * а счёт поставщика сохраняется в billReal/olReal для отчётов (расход, запас, сверхлимит в счетах).
+ */
+function gasToVirtual(r, s, t) {
+  if (!gasMonthRule(t) || s.vBill === undefined) return;
+  r.billReal = engineNum(r.bill);
+  r.olReal = engineNum(r.ol);
+  r.bill = engineRound(r.billReal - s.bill + s.vBill, 2);   // факт: введённый счёт + досбор сверх доли
+  r.ol = 0;                                                    // сверхлимит не размазывается — начислен в месяце
+  r.olVirtual = s.vOl;
+}
+
 /** План: счёт и сверхлимит каждого месяца — из объёма газа и цен ЖК. */
 function gasApplyPlan(planRows, tariffs) {
   var out = planRows.map(gasCopy);
@@ -101,6 +141,7 @@ function gasApplyPlan(planRows, tariffs) {
       r.bill = season[i].bill;
       r.ol = season[i].ol;
       r.gasInfo = season[i];
+      gasToVirtual(r, season[i], t);
     });
   });
   return out;
@@ -135,6 +176,7 @@ function gasApplyWork(workRows, tariffs) {
         r.bill = s.bill;
         r.ol = s.ol;
       }
+      gasToVirtual(r, s, t);
     });
   });
   return out;

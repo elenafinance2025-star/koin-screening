@@ -122,8 +122,8 @@ function repResult(planCalc, workCalc, factIdx, koshtPlan, koshtFact, costs) {
     var v = {
       accGasP: sum(p, function (r) { return r.charged; }), accGasD: sum(wf, function (r) { return r.charged; }),
       accGasF: sum(w, function (r) { return r.charged; }),
-      billP: sum(p, function (r) { return r.bill; }), billD: sum(wf, function (r) { return r.bill; }),
-      billF: sum(w, function (r) { return r.bill; }),
+      billP: sum(p, function (r) { return r.billReal; }), billD: sum(wf, function (r) { return r.billReal; }),
+      billF: sum(w, function (r) { return r.billReal; }),
       accBP: sum(p, function (r) { return boiler(koshtPlan, r); }), accBD: sum(wf, function (r) { return boiler(koshtFact, r); }),
       accBF: sum(w, function (r) { return boiler(koshtFact, r); }),
       costP: cp.value, costF: hasFact ? factCost : cp.value
@@ -177,7 +177,7 @@ function repTariffs(calc, koshtFact) {
     formats: ['text', 'text', 'text', 'text', 'money', 'tariff', 'tariff', 'tariff', 'tariff', 'money', 'money', 'text'],
     rows: calc.map(function (r) {
       var kt = repKoshtTariff(koshtFact, r.zk) * koshtMonthShare(r.monthIdx, repKoshtMonths(koshtFact, r.zk));
-      return [r.month, r.receipt, r.zk, r.source || 'план', r.bill, engineRound(kt, 2), r.price, r.tNo, r.tSpch,
+      return [r.month, r.receipt, r.zk, r.source || 'план', r.billReal, engineRound(kt, 2), r.price, r.tNo, r.tSpch,
         r.charged, r.diff, r.status2];
     })
   };
@@ -191,7 +191,7 @@ function repAccrual(planCalc, workCalc, factIdx, koshtPlan, koshtFact) {
     var p = pIdx[repKey(w)] || {};
     var isFact = repHasFact(factIdx[repKey(w)]);
     // Запас = начислено жильцам по газовым тарифам − счёт поставщика (плюс — собрано больше счёта, минус — меньше)
-    var reserveFact = isFact ? w.charged - w.bill : '';
+    var reserveFact = isFact ? w.charged - w.billReal : '';
     if (isFact) reserveAcc[w.zk] = (reserveAcc[w.zk] || 0) + reserveFact;
     var boilerPlan = repKoshtTariff(koshtPlan, w.zk) * koshtMonthShare(w.monthIdx, repKoshtMonths(koshtPlan, w.zk)) * repKoshtArea(koshtPlan, w.zk);
     var boilerFact = repKoshtTariff(koshtFact, w.zk) * koshtMonthShare(w.monthIdx, repKoshtMonths(koshtFact, w.zk)) * repKoshtArea(koshtFact, w.zk);
@@ -200,7 +200,7 @@ function repAccrual(planCalc, workCalc, factIdx, koshtPlan, koshtFact) {
     return [w.month, w.zk,
       boilerPlan, isFact ? boilerFact : '', d(boilerFact, boilerPlan),
       engineNum(p.gas), f(w.gas), d(w.gas, engineNum(p.gas)),
-      engineNum(p.bill), f(w.bill), d(w.bill, engineNum(p.bill)),
+      engineNum(p.billReal), f(w.billReal), d(w.billReal, engineNum(p.billReal)),
       engineNum(p.charged), f(w.charged), d(w.charged, engineNum(p.charged)),
       reserveFact, isFact ? reserveAcc[w.zk] : ''];
   });
@@ -221,20 +221,23 @@ function repAccrual(planCalc, workCalc, factIdx, koshtPlan, koshtFact) {
 
 /** 3. Сверхлимит: в счетах и начислено в тарифах, помесячно и нарастающим итогом. */
 function repOverlimit(planIdx, workCalc, factIdx) {
-  var acc = {};
+  var acc = {}, season = {};
+  workCalc.forEach(function (w) { season[w.zk] = (season[w.zk] || 0) + w.olReal; });
   var rows = workCalc.map(function (w) {
     var a = acc[w.zk] = acc[w.zk] || { bill: 0, charged: 0 };
-    a.bill += w.ol;
-    a.charged += w.olCharged;
+    // режим месячной доли лимита: сверхлимит начислен в месяце (olVirtual), иначе — надбавка и сглаживание (olCharged)
+    var charged = w.olVirtual !== null && w.olVirtual !== undefined ? w.olVirtual : w.olCharged;
+    a.bill += w.olReal;
+    a.charged += charged;
     var g = w.gasInfo;
     return [w.month, w.zk, w.source || 'план',
       g ? g.cum : '', g ? g.limitLeft : '',
-      w.ol, w.olCharged, a.charged - a.bill, w.olSeason - a.charged];
+      w.olReal, charged, a.charged - a.bill, season[w.zk] - a.charged];
   });
   return {
     id: 'overlimit', title: 'Сверхлимит газа: выставлено в счетах и начислено в тарифах',
     note: 'Данные — факт там, где счёт введён, иначе план. Начислено в тарифах = надбавка μ × Гкал по счётчикам + добавка сглаживания на квартиры без счётчиков и СПЧ. ' +
-      '«Разница нараст.» = начислено с ноября − выставлено в счетах с ноября. «Осталось разнести» = сверхлимит сезона − начислено нарастающим итогом. Сравнение с планом — на вкладке «План-факт».',
+      '«Разница нараст.» = начислено с ноября − выставлено в счетах с ноября. «Осталось разнести» = сверхлимит сезона − начислено нарастающим итогом (минус — собрано больше, к возврату перерасчётом). Режим «по месячной доле лимита»: сверх накопленной доли лимита начисляется сразу по цене сверх лимита. Сравнение с планом — на вкладке «План-факт».',
     headers: ['Месяц', 'ЖК', 'Данные', 'Накоплено с ноября, тыс. м³', 'Остаток лимита, тыс. м³',
       'В счёте поставщика, грн', 'Начислено в тарифах, грн', 'Разница нараст., грн', 'Осталось разнести, грн'],
     formats: ['text', 'text', 'text', 'num4', 'num4', 'money', 'money', 'money', 'money'],
@@ -245,8 +248,8 @@ function repOverlimit(planIdx, workCalc, factIdx) {
 /** 4. План-факт по всем показателям. */
 function repPlanFact(planIdx, workCalc, factIdx, koshtPlan, koshtFact) {
   var items = [
-    ['Счёт поставщика, грн', 'bill', 'money'],
-    ['в т.ч. сверхлимит, грн', 'ol', 'money'],
+    ['Счёт поставщика, грн', 'billReal', 'money'],
+    ['в т.ч. сверхлимит, грн', 'olReal', 'money'],
     ['Газ, тыс. м³', 'gas', 'num4'],
     ['Норматив, Гкал', 'norm', 'num3'],
     ['Гкал по кв. счётчикам', 'gkMeter', 'num3'],
@@ -292,7 +295,7 @@ function repDetails(calc) {
     formats: ['text', 'text', 'text', 'money', 'money', 'num3', 'text', 'num4', 'num4', 'num4', 'money', 'money', 'money',
       'num4', 'num3', 'num4', 'money', 'tariff', 'tariff', 'tariff', 'money', 'money', 'money', 'num3', 'text'],
     rows: calc.map(function (r) {
-      return [r.month, r.zk, r.source || 'план', r.bill, r.ol, r.norm, r.normSrc, r.gkMeter, r.volNo, r.fsoMzkVol, r.mu,
+      return [r.month, r.zk, r.source || 'план', r.billReal, r.olReal, r.norm, r.normSrc, r.gkMeter, r.volNo, r.fsoMzkVol, r.mu,
         r.pool, r.costNo, r.t0, r.weight, r.lambda, r.addSmooth, r.price, r.tNo, r.tSpch, r.charged, r.diff, r.tol,
         r.ratio === null ? '' : r.ratio, r.status2];
     })

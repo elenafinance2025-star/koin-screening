@@ -79,5 +79,31 @@ check('ноябрь — проверка счёта по цене ноября, 
 check('декабрь (прогноз) считается по 30 000: 2,5 × 30 000 = 75 000 (' + wAt[1].bill + ')', near(wAt[1].bill, 75000));
 var pAt = r4.planCalc.filter(function (r) { return r.zk === 'Атлант'; });
 check('план по ценам, зафиксированным с планом: декабрь 2,5 × 27 785,36 (' + pAt[1].bill + ')', near(pAt[1].bill, 2.5 * 27785.36));
+
+// Режим «по месячной доле лимита» (ЛП, доли 7,40647 / 18 / 23 / 18 / 16, план 18,40647 / 20 / 35 / 26 / 16)
+var TM = JSON.parse(JSON.stringify(T['Лузановский Парк'])); TM.limitRule = 'month';
+var vols = [18.40647, 20, 35, 26, 16];
+var sm = ctx.gasSeason(TM, vols);
+var overMonths = sm.map(function (x) { return x.overMonth; });
+check('месячная доля: сверх доли по месяцам 11 / 2 / 12 / 8 / 0 (' + overMonths.map(function (x) { return x.toFixed(3); }).join(' / ') + ')',
+  near(overMonths[0], 11, 1e-6) && near(overMonths[1], 2, 1e-6) && near(overMonths[2], 12, 1e-6) && near(overMonths[3], 8, 1e-6) && near(overMonths[4], 0, 1e-6));
+var vSum = sm.reduce(function (s, x) { return s + x.vBill; }, 0), rSum = sm.reduce(function (s, x) { return s + x.bill; }, 0);
+check('месячная доля: за сезон начислено = счетам поставщика, когда превышение растёт (' + vSum.toFixed(2) + ' / ' + rSum.toFixed(2) + ')', near(vSum, rSum, 0.05));
+check('месячная доля: ноябрь — 7,40647 по льготе + 11 сверх = ' + sm[0].vBill.toFixed(2), near(sm[0].vBill, 7.40647 * 8082.6 + 11 * 27785.36, 0.01));
+// тёплый март: доля 16, сожгли 5 → собрано сверх доли больше, чем выставит поставщик → излишек к возврату, минуса нет
+var warm = ctx.gasSeason(TM, [18.40647, 20, 35, 26, 5]);
+var vOl = warm.reduce(function (s, x) { return s + x.vOl; }, 0), rOl = warm.reduce(function (s, x) { return s + x.ol; }, 0);
+check('месячная доля, тёплый март: собрано сверхлимита ' + vOl.toFixed(0) + ' ≥ выставлено ' + rOl.toFixed(0) + ' (излишек к возврату)', vOl >= rOl - 0.01 && vOl - rOl > 1000);
+// через отчёты: тарифы от начисляемого счёта, расход — счёт поставщика, ЗАПАС ≥ 0 нарастающим итогом
+var planM = ctx.seedPlanRows().map(function (r) { var c = JSON.parse(JSON.stringify(r)); if (c.zk === 'Лузановский Парк') c.gas = vols[ctx.ENGINE_MONTHS.indexOf(c.month)]; return c; });
+var TT = JSON.parse(JSON.stringify(T)); TT['Лузановский Парк'] = TM;
+var rm = ctx.repBuildAll({ plan: planM, fact: [], settings: ctx.engineDefaultSettings(), gasTariffs: TT, koshtPlan: {}, koshtFact: {} });
+var lpw = rm.workCalc.filter(function (r) { return r.zk === 'Лузановский Парк'; });
+check('отчёты: в ноябре тарифы от начисляемого счёта (' + lpw[0].bill.toFixed(2) + '), счёт поставщика ' + lpw[0].billReal.toFixed(2),
+  near(lpw[0].bill, sm[0].vBill) && near(lpw[0].billReal, sm[0].bill) && lpw[0].ol === 0);
+var ovr = rm.tables[2].rows.filter(function (r) { return r[1] === 'Лузановский Парк'; });
+check('отчёты: «Сверхлимит» — начислено в ноябре 11 × 27 785,36, в счёте 0; к марту разница ≈ 0', near(ovr[0][6], 11 * 27785.36, 0.01) && ovr[0][5] === 0 && Math.abs(ovr[4][7]) < 1);
+var resLp = rm.tables[5].rows.filter(function (r) { return r[0] === 'Лузановский Парк'; });
+check('отчёты: «Результат» — расход по газу = счета поставщика', near(resLp[1][2], rSum, 0.05));
 console.log(failed ? '\nПРОВАЛЕНО: ' + failed : '\nГаз по лимиту считается верно');
 process.exit(failed ? 1 : 0);

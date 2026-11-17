@@ -787,6 +787,18 @@
         f.appendChild(h('label', { text: x[1] }));
         f.appendChild(h('input', { value: String(t[x[0]]).replace('.', ','), onchange: function (e) { t[x[0]] = engineNum(e.target.value); } }));
       });
+      // Как начислять сверхлимит жильцам
+      if (!t.limitMonths || !t.limitMonths.length) t.limitMonths = (GAS_DEFAULT_LIMIT_MONTHS[zk] || ['', '', '', '', '']).slice();
+      var ruleSel = h('select', { onchange: function () { t.limitRule = ruleSel.value; } }, [
+        ['season', 'по сезонному лимиту — сглаживание по профилю'],
+        ['month', 'по месячной доле лимита — сверх доли сразу по цене сверх лимита, перерасчёт в конце сезона']
+      ].map(function (o) { return h('option', { value: o[0], text: o[1], selected: (t.limitRule || 'season') === o[0] ? 'selected' : null }); }));
+      f.appendChild(h('label', { text: 'Начисление сверхлимита жильцам' })); f.appendChild(ruleSel);
+      f.appendChild(h('label', { text: 'Доля лимита по месяцам (поставщик), тыс. м³' }));
+      f.appendChild(h('div', { class: 'months5' }, ENGINE_MONTHS.map(function (m, i) {
+        return h('label', { class: 'mini' }, [h('span', { text: m }), h('input', { value: t.limitMonths[i] !== '' && t.limitMonths[i] !== undefined ? String(t.limitMonths[i]).replace('.', ',') : '',
+          placeholder: '—', inputmode: 'decimal', onchange: function (e) { var v = e.target.value.trim(); t.limitMonths[i] = v === '' ? '' : engineNum(v); } })]);
+      })));
       t.priceOverByMonth = t.priceOverByMonth || ['', '', '', '', ''];
       f.appendChild(h('label', { text: 'Цена сверх лимита по месяцам (из счетов), грн/тыс. м³' }));
       f.appendChild(h('div', { class: 'months5' }, ENGINE_MONTHS.map(function (m, i) {
@@ -806,6 +818,7 @@
     main.appendChild(h('section', { class: 'card' }, [h('h3', { text: 'Газ и лимиты' }),
       h('p', { class: 'hint', text: 'Цена сверх лимита по месяцам: вписывайте цену из счёта каждого месяца — прошлые месяцы не меняются. Пустой месяц берёт последнюю введённую цену (или плановую). План считается по ценам, зафиксированным кнопкой «Зафиксировать план» (вкладка «Приказ и Excel»).' }),
       h('p', { class: 'hint', text: 'Лимит — на весь сезон. Пока накопленный с ноября объём не превысил лимит, газ по льготной цене; в месяце перехода — частично; дальше — по цене сверх лимита. План: счёт и сверхлимит считаются из объёма. Факт: вводится из счёта, рядом показывается расчёт для проверки. Месяцы без факта — прогноз от фактического накопленного объёма. Смена цены сверх лимита сразу пересчитывает прогноз.' }),
+      h('p', { class: 'hint', text: 'Начисление сверхлимита «по месячной доле лимита»: накопленный объём сравнивается с накопленной долей лимита поставщика (неиспользованная доля переходит на следующие месяцы). Превышение начисляется жильцам сразу по цене сверх лимита, хотя поставщик выставит его позже, — разница копится в резерве («Начисление → ЗАПАС», «Сверхлимит»). Собранного всегда не меньше сверхлимита в счетах; излишек в конце сезона возвращается перерасчётом.' }),
       gbox,
       h('button', { class: 'primary', text: 'Сохранить газ и лимиты', onclick: function () {
         Object.keys(G).forEach(function (zk) { G[zk].extras = G[zk].extras.filter(function (e) { return engineNum(e.amount) !== 0; }); });
